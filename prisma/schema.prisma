@@ -12,21 +12,60 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
+model Admin {
   id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  password  String
+  address   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  sessions  Session[]
 }
 
-model Session {
+model Merchant {
   id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  merchantId Int      @unique
+  email     String?
+  address   String
+  active    Boolean  @default(true)
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sessions  MerchantSession[]
+  invoices  Invoice[]
+}
+
+model AcceptedToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MerchantSession {
+  id        String   @id @default(uuid())
+  merchantId String
+  merchant  Merchant @relation(fields: [merchantId], references: [id])
   token     String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+enum Status {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+model Invoice {
+  id        String   @id @default(uuid())
+  invoiceId Int      @unique
+  amount    BigInt
+  token     String
+  merchantId String
+  merchant  Merchant @relation(fields: [merchantId], references: [id])
+  ref       String
+  payer     String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  status    Status
+  datePaid  DateTime?
 }

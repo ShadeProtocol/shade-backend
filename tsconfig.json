@@ -4,6 +4,16 @@
     "moduleResolution": "NodeNext",
     "target": "ES2023",
     "strict": true,
-    "esModuleInterop": true
-  }
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "types": [
+      "jest",
+      "node"
+    ]
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests"
+  ]
 }
