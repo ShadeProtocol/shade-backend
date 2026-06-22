@@ -1,4 +1,8 @@
+import { Merchant } from '@prisma/client';
 import prisma from '../config/prisma.js';
+import { AppError } from '../utils/errors.js';
+import { RegisterMerchantInput } from '../utils/validation.js';
+import { sendOtpEmail } from './otp.services.js';
 
 interface MerchantData {
   merchantId: number;
@@ -7,6 +11,29 @@ interface MerchantData {
   active?: boolean;
   verified?: boolean;
 }
+
+/**
+ * Returns a public-facing view of a merchant. Built as an allow-list so that
+ * any sensitive fields added to the model later are never exposed by default.
+ */
+export const sanitizeMerchant = (merchant: Merchant) => ({
+  id: merchant.id,
+  merchantId: merchant.merchantId,
+  email: merchant.email,
+  address: merchant.address,
+  firstName: merchant.firstName,
+  lastName: merchant.lastName,
+  businessName: merchant.businessName,
+  category: merchant.category,
+  description: merchant.description,
+  logo: merchant.logo,
+  active: merchant.active,
+  verified: merchant.verified,
+  emailVerified: merchant.emailVerified,
+  registered: merchant.registered,
+  createdAt: merchant.createdAt,
+  updatedAt: merchant.updatedAt,
+});
 
 export const createMerchant = async (merchantData: MerchantData) => {
   try {
@@ -42,4 +69,57 @@ export const listMerchants = async (limit: number, offset: number) => {
   } catch (error) {
     throw error;
   }
+};
+
+/**
+ * Completes a merchant's profile after wallet authentication.
+ *
+ * Enforces that the email is unique across merchants and that the profile has
+ * not already been completed, persists the profile data, resets email
+ * verification, and triggers an OTP email.
+ */
+export const registerMerchant = async (merchantId: string, data: RegisterMerchantInput) => {
+  const merchant = await prisma.merchant.findUnique({
+    where: { id: merchantId },
+  });
+
+  if (!merchant) {
+    throw new AppError(404, 'Merchant not found');
+  }
+
+  if (merchant.registered) {
+    throw new AppError(409, 'Profile already set up');
+  }
+
+  const normalizedEmail = data.email.trim().toLowerCase();
+
+  const existingEmail = await prisma.merchant.findFirst({
+    where: {
+      email: normalizedEmail,
+      NOT: { id: merchantId },
+    },
+  });
+
+  if (existingEmail) {
+    throw new AppError(409, 'Email already registered');
+  }
+
+  const updatedMerchant = await prisma.merchant.update({
+    where: { id: merchantId },
+    data: {
+      firstName: data.firstName.trim(),
+      lastName: data.lastName.trim(),
+      email: normalizedEmail,
+      businessName: data.businessName.trim(),
+      category: data.category.trim(),
+      description: data.description.trim(),
+      logo: data.logo?.trim() ?? null,
+      emailVerified: false,
+      registered: true,
+    },
+  });
+
+  await sendOtpEmail(normalizedEmail);
+
+  return sanitizeMerchant(updatedMerchant);
 };

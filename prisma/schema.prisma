@@ -20,16 +20,24 @@ model Admin {
 }
 
 model Merchant {
-  id        String   @id @default(uuid())
-  merchantId Int      @unique
-  email     String?
-  address   String
-  active    Boolean  @default(true)
-  verified  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  sessions  MerchantSession[]
-  invoices  Invoice[]
+  id            String   @id @default(uuid())
+  merchantId    Int      @unique
+  email         String?  @unique
+  address       String
+  firstName     String?
+  lastName      String?
+  businessName  String?
+  category      String?
+  description   String?
+  logo          String?
+  active        Boolean  @default(true)
+  verified      Boolean  @default(false)
+  emailVerified Boolean  @default(false)
+  registered    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  sessions      MerchantSession[]
+  invoices      Invoice[]
 }
 
 model AcceptedToken {

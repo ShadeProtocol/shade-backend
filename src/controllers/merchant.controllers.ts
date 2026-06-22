@@ -1,5 +1,12 @@
 import { Request, Response } from 'express';
-import { createMerchant, getMerchant, listMerchants } from '../services/merchant.services.js';
+import {
+  createMerchant,
+  getMerchant,
+  listMerchants,
+  registerMerchant,
+} from '../services/merchant.services.js';
+import { validateRegisterMerchant } from '../utils/validation.js';
+import { AppError } from '../utils/errors.js';
 
 export const createMerchantController = async (req: Request, res: Response) => {
   try {
@@ -24,6 +31,32 @@ export const listMerchantsController = async (req: Request, res: Response) => {
     const merchants = await listMerchants(Number(req.query.limit), Number(req.query.offset));
     res.status(200).json(merchants);
   } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+export const registerMerchantController = async (req: Request, res: Response): Promise<void> => {
+  const merchant = req.merchant;
+
+  if (!merchant) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const errors = validateRegisterMerchant(req.body);
+  if (Object.keys(errors).length > 0) {
+    res.status(400).json({ error: 'Validation failed', errors });
+    return;
+  }
+
+  try {
+    const profile = await registerMerchant(merchant.id, req.body);
+    res.status(200).json(profile);
+  } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
