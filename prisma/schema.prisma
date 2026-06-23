@@ -70,23 +70,31 @@ model MerchantSession {
 }
 
 enum Status {
+  DRAFT
   PENDING
   PAID
   CANCELLED
 }
 
 model Invoice {
-  id        String   @id @default(uuid())
-  invoiceId Int      @unique
-  amount    BigInt
-  token     String
-  merchantId String
-  merchant  Merchant @relation(fields: [merchantId], references: [id])
-  ref       String
-  payer     String?
-  email     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  status    Status
-  datePaid  DateTime?
+  id          String    @id @default(uuid())
+  invoiceId   Int?      @unique
+  paymentSlug String    @unique
+  description String
+  amount      BigInt
+  token       String
+  merchantId  String
+  merchant    Merchant  @relation(fields: [merchantId], references: [id])
+  status      Status    @default(PENDING)
+  ref         String?
+  payer       String?
+  payerEmail  String?
+  email       String?
+  expiresAt   DateTime?
+  datePaid    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([merchantId])
+  @@index([merchantId, status])
 }
