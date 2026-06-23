@@ -38,6 +38,19 @@ model Merchant {
   updatedAt     DateTime @updatedAt
   sessions      MerchantSession[]
   invoices      Invoice[]
+  nonces    AuthNonce[]
+}
+
+model AuthNonce {
+  id        String    @id @default(uuid())
+  address   String
+  nonce     String    @unique
+  message   String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  merchantId String?
+  merchant  Merchant? @relation(fields: [merchantId], references: [id])
 }
 
 model AcceptedToken {
