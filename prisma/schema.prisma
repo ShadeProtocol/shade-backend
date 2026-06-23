@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,45 +6,69 @@ datasource db {
   provider = "postgresql"
 }
 
+// Retained: admin-level access control is a separate auth concern handled outside merchant flows.
 model Admin {
   id        String   @id @default(uuid())
-  address   String
+  address   String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Merchant {
-  id            String   @id @default(uuid())
-  merchantId    Int      @unique
-  email         String?  @unique
-  address       String
+  id            String    @id @default(uuid())
+  merchantId    Int       @unique
+  address       String    @unique
+  email         String?   @unique
   firstName     String?
   lastName      String?
   businessName  String?
   category      String?
   description   String?
   logo          String?
-  active        Boolean  @default(true)
-  verified      Boolean  @default(false)
-  emailVerified Boolean  @default(false)
-  registered    Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  sessions      MerchantSession[]
+  active        Boolean   @default(true)
+  verified      Boolean   @default(false)
+  emailVerified Boolean   @default(false)
+  registered    Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  refreshTokens RefreshToken[]
   invoices      Invoice[]
-  nonces    AuthNonce[]
+  nonces        AuthNonce[]
+  apiKeys       ApiKey[]
 }
 
 model AuthNonce {
-  id        String    @id @default(uuid())
-  address   String
-  nonce     String    @unique
-  message   String
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  id         String    @id @default(uuid())
+  address    String
+  nonce      String    @unique
+  message    String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
   merchantId String?
-  merchant  Merchant? @relation(fields: [merchantId], references: [id])
+  merchant   Merchant? @relation(fields: [merchantId], references: [id])
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  token      String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  merchantId String
+  merchant   Merchant  @relation(fields: [merchantId], references: [id])
+  keyHash    String    @unique
+  name       String?
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
 }
 
 model AcceptedToken {
@@ -60,33 +78,26 @@ model AcceptedToken {
   updatedAt DateTime @updatedAt
 }
 
-model MerchantSession {
-  id        String   @id @default(uuid())
-  merchantId String
-  merchant  Merchant @relation(fields: [merchantId], references: [id])
-  token     String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-}
-
-enum Status {
+enum InvoiceStatus {
   PENDING
   PAID
   CANCELLED
+  EXPIRED
 }
 
 model Invoice {
-  id        String   @id @default(uuid())
-  invoiceId Int      @unique
-  amount    BigInt
-  token     String
-  merchantId String
-  merchant  Merchant @relation(fields: [merchantId], references: [id])
-  ref       String
-  payer     String?
-  email     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  status    Status
-  datePaid  DateTime?
+  id           String        @id @default(uuid())
+  invoiceId    Int           @unique
+  paymentSlug  String        @unique
+  amount       BigInt
+  token        String
+  merchantId   String
+  merchant     Merchant      @relation(fields: [merchantId], references: [id])
+  ref          String
+  payer        String?
+  email        String?
+  status       InvoiceStatus
+  datePaid     DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
