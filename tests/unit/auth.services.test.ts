@@ -181,8 +181,8 @@ describe('Auth Services', () => {
   });
 
   describe('issueRefreshToken', () => {
-    test('should create a MerchantSession and return the token', async () => {
-      prismaMock.merchantSession.create.mockResolvedValue({
+    test('should create a RefreshToken and return the token', async () => {
+      prismaMock.refreshToken.create.mockResolvedValue({
         id: 'session-uuid',
         merchantId: 'merchant-uuid',
         token: 'ignored',
@@ -194,7 +194,7 @@ describe('Auth Services', () => {
 
       expect(typeof result).toBe('string');
       expect(result.length).toBeGreaterThan(0);
-      expect(prismaMock.merchantSession.create).toHaveBeenCalledWith({
+      expect(prismaMock.refreshToken.create).toHaveBeenCalledWith({
         data: {
           merchantId: 'merchant-uuid',
           token: expect.any(String),
@@ -225,15 +225,22 @@ describe('Auth Services', () => {
       prismaMock.merchant.create.mockResolvedValue({
         id: 'merchant-uuid',
         merchantId: 123456,
+        address,
         email: null,
         firstName: null,
-        address,
+        lastName: null,
+        businessName: null,
+        category: null,
+        description: null,
+        logo: null,
         active: true,
         verified: false,
+        emailVerified: false,
+        registered: false,
         createdAt: mockDate,
         updatedAt: mockDate,
       });
-      prismaMock.merchantSession.create.mockResolvedValue({
+      prismaMock.refreshToken.create.mockResolvedValue({
         id: 'session-uuid',
         merchantId: 'merchant-uuid',
         token: 'ignored',
@@ -262,15 +269,22 @@ describe('Auth Services', () => {
       prismaMock.merchant.findFirst.mockResolvedValue({
         id: 'existing-merchant-uuid',
         merchantId: 654321,
+        address,
         email: 'merchant@test.com',
         firstName: 'John',
-        address,
+        lastName: 'Doe',
+        businessName: 'Acme',
+        category: 'retail',
+        description: 'A merchant',
+        logo: null,
         active: true,
         verified: true,
+        emailVerified: true,
+        registered: true,
         createdAt: mockDate,
         updatedAt: mockDate,
       });
-      prismaMock.merchantSession.create.mockResolvedValue({
+      prismaMock.refreshToken.create.mockResolvedValue({
         id: 'session-uuid',
         merchantId: 'existing-merchant-uuid',
         token: 'ignored',
