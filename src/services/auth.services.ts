@@ -88,7 +88,7 @@ export async function issueRefreshToken(merchantId: string): Promise<string> {
   const token = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
 
-  await prisma.merchantSession.create({
+  await prisma.refreshToken.create({
     data: { merchantId, token, expiresAt },
   });
 
@@ -112,7 +112,7 @@ export async function authenticateWallet(address: string, nonce: string, signatu
     merchant: {
       id: merchant.id,
       address: merchant.address,
-      isRegistered: merchant.firstName !== null,
+      isRegistered: merchant.registered,
     },
   } as const;
 }
