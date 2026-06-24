@@ -1,5 +1,12 @@
 import { mockReset } from 'jest-mock-extended';
-import { TransactionType } from '@prisma/client';
+
+// Local mirror of the Prisma enum — never import runtime values from
+// @prisma/client in tests; the generated client may not exist in CI.
+const TransactionType = {
+  INVOICE_PAYMENT: 'INVOICE_PAYMENT',
+  SUBSCRIPTION_CHARGE: 'SUBSCRIPTION_CHARGE',
+} as const;
+type TransactionType = (typeof TransactionType)[keyof typeof TransactionType];
 
 const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
 

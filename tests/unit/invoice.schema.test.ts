@@ -1,5 +1,23 @@
 import { mockReset } from 'jest-mock-extended';
-import { InvoiceStatus, InvoicePricingMode } from '@prisma/client';
+
+// Local mirrors of the Prisma enums — never import runtime values from
+// @prisma/client in tests; the generated client may not exist in CI.
+const InvoiceStatus = {
+  PENDING: 'PENDING',
+  PAID: 'PAID',
+  CANCELLED: 'CANCELLED',
+  REFUNDED: 'REFUNDED',
+  PARTIALLY_REFUNDED: 'PARTIALLY_REFUNDED',
+  PARTIALLY_PAID: 'PARTIALLY_PAID',
+  DRAFT: 'DRAFT',
+} as const;
+type InvoiceStatus = (typeof InvoiceStatus)[keyof typeof InvoiceStatus];
+
+const InvoicePricingMode = {
+  FIXED_CRYPTO: 'FIXED_CRYPTO',
+  FIXED_FIAT: 'FIXED_FIAT',
+} as const;
+type InvoicePricingMode = (typeof InvoicePricingMode)[keyof typeof InvoicePricingMode];
 
 const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
 

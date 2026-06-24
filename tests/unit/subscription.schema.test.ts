@@ -1,5 +1,12 @@
 import { mockReset } from 'jest-mock-extended';
-import { SubscriptionStatus } from '@prisma/client';
+
+// Local mirror of the Prisma enum — never import runtime values from
+// @prisma/client in tests; the generated client may not exist in CI.
+const SubscriptionStatus = {
+  ACTIVE: 'ACTIVE',
+  CANCELLED: 'CANCELLED',
+} as const;
+type SubscriptionStatus = (typeof SubscriptionStatus)[keyof typeof SubscriptionStatus];
 
 const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
 
