@@ -18,14 +18,16 @@ const REGISTER_URL = '/api/v1/merchants/register';
 const baseMerchant = {
   id: 'uuid-1',
   merchantId: 1,
-  email: null,
   address: '0x123',
+  account: null,
+  email: null,
   firstName: null,
   lastName: null,
   businessName: null,
   category: null,
   description: null,
   logo: null,
+  webhook: null,
   active: true,
   verified: false,
   emailVerified: false,
@@ -44,7 +46,7 @@ const validPayload = {
 };
 
 const authenticateAs = (merchant: Record<string, unknown>) => {
-  prismaMock.merchantSession.findUnique.mockResolvedValue({
+  prismaMock.refreshToken.findUnique.mockResolvedValue({
     id: 'session-1',
     merchantId: merchant.id,
     token: 'valid-token',

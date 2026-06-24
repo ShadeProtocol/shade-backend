@@ -9,9 +9,22 @@ const MERCHANT_ID = 'merchant-1';
 const merchant = {
   id: MERCHANT_ID,
   merchantId: 1,
-  email: 'merchant@example.com',
   address: '0x123',
+  account: null,
+  email: 'merchant@example.com',
+  firstName: null,
+  lastName: null,
+  businessName: null,
+  category: null,
+  description: null,
+  logo: null,
+  webhook: null,
+  active: true,
+  verified: false,
+  emailVerified: false,
   registered: true,
+  createdAt: new Date(),
+  updatedAt: new Date(),
 };
 
 const baseInvoice = {
@@ -34,7 +47,7 @@ const baseInvoice = {
 };
 
 const authenticate = () => {
-  prismaMock.merchantSession.findUnique.mockResolvedValue({
+  prismaMock.refreshToken.findUnique.mockResolvedValue({
     id: 'session-1',
     merchantId: MERCHANT_ID,
     token: 'valid-token',

@@ -28,7 +28,7 @@ export const authenticateMerchant = async (
       return;
     }
 
-    const session = await prisma.merchantSession.findUnique({
+    const session = await prisma.refreshToken.findUnique({
       where: { token },
       include: { merchant: true },
     });

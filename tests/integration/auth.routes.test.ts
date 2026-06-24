@@ -56,15 +56,24 @@ describe('Auth Routes', () => {
       prismaMock.merchant.create.mockResolvedValue({
         id: 'merchant-uuid',
         merchantId: 123456,
+        address,
+        account: null,
         email: null,
         firstName: null,
-        address,
+        lastName: null,
+        businessName: null,
+        category: null,
+        description: null,
+        logo: null,
+        webhook: null,
         active: true,
         verified: false,
+        emailVerified: false,
+        registered: false,
         createdAt: mockDate,
         updatedAt: mockDate,
       });
-      prismaMock.merchantSession.create.mockResolvedValue({
+      prismaMock.refreshToken.create.mockResolvedValue({
         id: 'session-uuid',
         merchantId: 'merchant-uuid',
         token: 'refresh-uuid',
@@ -94,15 +103,24 @@ describe('Auth Routes', () => {
       prismaMock.merchant.findFirst.mockResolvedValue({
         id: 'merchant-uuid',
         merchantId: 123456,
+        address,
+        account: null,
         email: 'test@merchant.com',
         firstName: 'Jane',
-        address,
+        lastName: 'Doe',
+        businessName: 'Acme',
+        category: 'retail',
+        description: null,
+        logo: null,
+        webhook: null,
         active: true,
         verified: true,
+        emailVerified: true,
+        registered: true,
         createdAt: mockDate,
         updatedAt: mockDate,
       });
-      prismaMock.merchantSession.create.mockResolvedValue({
+      prismaMock.refreshToken.create.mockResolvedValue({
         id: 'session-uuid',
         merchantId: 'merchant-uuid',
         token: 'refresh-uuid',

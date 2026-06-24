@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,45 +6,74 @@ datasource db {
   provider = "postgresql"
 }
 
+// Retained: admin-level access control is a separate auth concern handled outside merchant flows.
 model Admin {
   id        String   @id @default(uuid())
-  address   String
+  address   String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Merchant {
-  id            String   @id @default(uuid())
-  merchantId    Int      @unique
-  email         String?  @unique
-  address       String
+  id            String    @id @default(uuid())
+  merchantId    Int       @unique
+  address       String    @unique
+  account       String?
+  email         String?   @unique
   firstName     String?
   lastName      String?
   businessName  String?
   category      String?
   description   String?
   logo          String?
-  active        Boolean  @default(true)
-  verified      Boolean  @default(false)
-  emailVerified Boolean  @default(false)
-  registered    Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  sessions      MerchantSession[]
-  invoices      Invoice[]
-  nonces    AuthNonce[]
+  webhook       String?
+  active        Boolean   @default(true)
+  verified      Boolean   @default(false)
+  emailVerified Boolean   @default(false)
+  registered    Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  refreshTokens      RefreshToken[]
+  invoices           Invoice[]
+  nonces             AuthNonce[]
+  apiKeys            ApiKey[]
+  analytics          MerchantAnalytics[]
+  subscriptionPlans  SubscriptionPlan[]
+  transactions       Transaction[]
 }
 
 model AuthNonce {
-  id        String    @id @default(uuid())
-  address   String
-  nonce     String    @unique
-  message   String
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  id         String    @id @default(uuid())
+  address    String
+  nonce      String    @unique
+  message    String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
   merchantId String?
-  merchant  Merchant? @relation(fields: [merchantId], references: [id])
+  merchant   Merchant? @relation(fields: [merchantId], references: [id])
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  token      String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  merchantId String
+  merchant   Merchant  @relation(fields: [merchantId], references: [id])
+  keyHash    String    @unique
+  name       String?
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
 }
 
 model AcceptedToken {
@@ -60,41 +83,147 @@ model AcceptedToken {
   updatedAt DateTime @updatedAt
 }
 
-model MerchantSession {
-  id        String   @id @default(uuid())
-  merchantId String
-  merchant  Merchant @relation(fields: [merchantId], references: [id])
-  token     String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-}
-
-enum Status {
-  DRAFT
+// Matches the smart contract InvoiceStatus enum exactly.
+enum InvoiceStatus {
   PENDING
   PAID
   CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  PARTIALLY_PAID
+  DRAFT
+}
+
+enum InvoicePricingMode {
+  FIXED_CRYPTO
+  FIXED_FIAT
 }
 
 model Invoice {
-  id          String    @id @default(uuid())
-  invoiceId   Int?      @unique
-  paymentSlug String    @unique
-  description String
-  amount      BigInt
-  token       String
-  merchantId  String
-  merchant    Merchant  @relation(fields: [merchantId], references: [id])
-  status      Status    @default(PENDING)
-  ref         String?
-  payer       String?
-  payerEmail  String?
-  email       String?
-  expiresAt   DateTime?
-  datePaid    DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id               String             @id @default(uuid())
+  invoiceId        Int?               @unique
+  paymentSlug      String             @unique
+  description      String
+  amount           BigInt
+  amountPaid       BigInt             @default(0)
+  amountRefunded   BigInt             @default(0)
+  token            String
+  merchantId       String
+  merchant         Merchant           @relation(fields: [merchantId], references: [id])
+  payer            String?
+  email            String?
+  status           InvoiceStatus      @default(DRAFT)
+  pricingMode      InvoicePricingMode @default(FIXED_CRYPTO)
+  fiatCurrency     String?
+  fiatAmount       BigInt?
+  fiatDecimals     Int?
+  expiresAt        DateTime?
+  datePaid         DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
-  @@index([merchantId])
-  @@index([merchantId, status])
+  bridgePayments   BridgePayment[]
+
+  // Enables the composite FK on BridgePayment that enforces invoiceId+merchantId consistency.
+  @@unique([id, merchantId])
+}
+
+// Per-token analytics for a merchant. Composite unique mirrors the contract key.
+model MerchantAnalytics {
+  id               String   @id @default(uuid())
+  merchantId       String
+  merchant         Merchant @relation(fields: [merchantId], references: [id])
+  token            String
+  totalVolume      BigInt   @default(0)
+  totalFees        BigInt   @default(0)
+  transactionCount BigInt   @default(0)
+  lastUpdated      DateTime @updatedAt
+
+  @@unique([merchantId, token])
+}
+
+model SubscriptionPlan {
+  id            String         @id @default(uuid())
+  planId        Int            @unique
+  merchantId    String
+  merchant      Merchant       @relation(fields: [merchantId], references: [id])
+  description   String
+  token         String
+  amount        BigInt
+  interval      Int
+  active        Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  subscriptions Subscription[]
+
+  // Enables the composite FK on Subscription that enforces planId+merchantId consistency.
+  @@unique([id, merchantId])
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+}
+
+model Subscription {
+  id             String             @id @default(uuid())
+  subscriptionId Int                @unique
+  planId         String
+  merchantId     String
+  // Composite FK: DB rejects a subscription whose merchantId differs from its plan's merchantId.
+  // Prisma forbids a scalar from appearing in two @relation fields arrays, so the separate
+  // Merchant relation is intentionally absent here — reach merchant via plan.merchant.
+  plan           SubscriptionPlan   @relation(fields: [planId, merchantId], references: [id, merchantId])
+  customer       String
+  status         SubscriptionStatus @default(ACTIVE)
+  lastCharged    DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
+
+enum TransactionType {
+  INVOICE_PAYMENT
+  SUBSCRIPTION_CHARGE
+}
+
+model Transaction {
+  id              String          @id @default(uuid())
+  transactionType TransactionType
+  refId           Int
+  amount          BigInt
+  token           String
+  description     String
+  merchantId      String
+  merchant        Merchant        @relation(fields: [merchantId], references: [id])
+  date            DateTime
+  createdAt       DateTime        @default(now())
+}
+
+model TokenAnalytics {
+  id               String   @id @default(uuid())
+  token            String   @unique
+  totalVolume      BigInt   @default(0)
+  totalFees        BigInt   @default(0)
+  transactionCount BigInt   @default(0)
+  uniqueMerchants  Int      @default(0)
+  lastUpdated      DateTime @updatedAt
+}
+
+model BridgePayment {
+  id                   String   @id @default(uuid())
+  invoiceId            String
+  merchantId           String
+  // Composite FK: DB rejects a bridge payment whose merchantId differs from its invoice's merchantId.
+  // Prisma forbids a scalar from appearing in two @relation fields arrays, so the separate
+  // Merchant relation is intentionally absent here — reach merchant via invoice.merchant.
+  invoice              Invoice  @relation(fields: [invoiceId, merchantId], references: [id, merchantId])
+  payer                String?
+  sourceChain          String
+  destinationChain     String
+  token                String
+  amount               BigInt
+  destinationRecipient String
+  memo                 String?
+  createdAt            DateTime @default(now())
 }

@@ -1,4 +1,4 @@
-import type { Status } from '@prisma/client';
+import type { InvoiceStatus } from '@prisma/client';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const POSITIVE_INTEGER_REGEX = /^\d+$/;
@@ -11,7 +11,10 @@ const INVOICE_STATUSES = [
   'PENDING',
   'PAID',
   'CANCELLED',
-] as const satisfies readonly Status[];
+  'REFUNDED',
+  'PARTIALLY_REFUNDED',
+  'PARTIALLY_PAID',
+] as const satisfies readonly InvoiceStatus[];
 
 export const DEFAULT_LIMIT = 20;
 export const MAX_LIMIT = 100;
@@ -26,7 +29,7 @@ export interface CreateInvoiceInput {
 }
 
 export interface InvoiceListFilters {
-  status?: Status;
+  status?: InvoiceStatus;
   token?: string;
   startDate?: Date;
   endDate?: Date;
@@ -118,7 +121,7 @@ export const parseInvoiceListQuery = (query: Record<string, unknown>): ParsedLis
   if (query.status !== undefined) {
     const status = String(query.status).toUpperCase();
     if ((INVOICE_STATUSES as readonly string[]).includes(status)) {
-      filters.status = status as Status;
+      filters.status = status as InvoiceStatus;
     } else {
       errors.status = `status must be one of ${INVOICE_STATUSES.join(', ')}`;
     }
