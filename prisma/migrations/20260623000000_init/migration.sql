@@ -99,7 +99,7 @@ CREATE TABLE "AcceptedToken" (
 -- CreateTable
 CREATE TABLE "Invoice" (
     "id" TEXT NOT NULL,
-    "invoiceId" INTEGER NOT NULL,
+    "invoiceId" INTEGER,
     "paymentSlug" TEXT NOT NULL,
     "description" TEXT NOT NULL,
     "amount" BIGINT NOT NULL,
@@ -242,10 +242,16 @@ CREATE UNIQUE INDEX "Invoice_invoiceId_key" ON "Invoice"("invoiceId");
 CREATE UNIQUE INDEX "Invoice_paymentSlug_key" ON "Invoice"("paymentSlug");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Invoice_id_merchantId_key" ON "Invoice"("id", "merchantId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "MerchantAnalytics_merchantId_token_key" ON "MerchantAnalytics"("merchantId", "token");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "SubscriptionPlan_planId_key" ON "SubscriptionPlan"("planId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "SubscriptionPlan_id_merchantId_key" ON "SubscriptionPlan"("id", "merchantId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Subscription_subscriptionId_key" ON "Subscription"("subscriptionId");
@@ -272,16 +278,10 @@ ALTER TABLE "MerchantAnalytics" ADD CONSTRAINT "MerchantAnalytics_merchantId_fke
 ALTER TABLE "SubscriptionPlan" ADD CONSTRAINT "SubscriptionPlan_merchantId_fkey" FOREIGN KEY ("merchantId") REFERENCES "Merchant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Subscription" ADD CONSTRAINT "Subscription_planId_fkey" FOREIGN KEY ("planId") REFERENCES "SubscriptionPlan"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Subscription" ADD CONSTRAINT "Subscription_merchantId_fkey" FOREIGN KEY ("merchantId") REFERENCES "Merchant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Subscription" ADD CONSTRAINT "Subscription_planId_merchantId_fkey" FOREIGN KEY ("planId", "merchantId") REFERENCES "SubscriptionPlan"("id", "merchantId") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Transaction" ADD CONSTRAINT "Transaction_merchantId_fkey" FOREIGN KEY ("merchantId") REFERENCES "Merchant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "BridgePayment" ADD CONSTRAINT "BridgePayment_invoiceId_fkey" FOREIGN KEY ("invoiceId") REFERENCES "Invoice"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "BridgePayment" ADD CONSTRAINT "BridgePayment_merchantId_fkey" FOREIGN KEY ("merchantId") REFERENCES "Merchant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "BridgePayment" ADD CONSTRAINT "BridgePayment_invoiceId_merchantId_fkey" FOREIGN KEY ("invoiceId", "merchantId") REFERENCES "Invoice"("id", "merchantId") ON DELETE RESTRICT ON UPDATE CASCADE;

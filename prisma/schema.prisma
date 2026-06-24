@@ -40,9 +40,7 @@ model Merchant {
   apiKeys            ApiKey[]
   analytics          MerchantAnalytics[]
   subscriptionPlans  SubscriptionPlan[]
-  subscriptions      Subscription[]
   transactions       Transaction[]
-  bridgePayments     BridgePayment[]
 }
 
 model AuthNonce {
@@ -103,7 +101,7 @@ enum InvoicePricingMode {
 
 model Invoice {
   id               String             @id @default(uuid())
-  invoiceId        Int                @unique
+  invoiceId        Int?               @unique
   paymentSlug      String             @unique
   description      String
   amount           BigInt
@@ -125,6 +123,9 @@ model Invoice {
   updatedAt        DateTime           @updatedAt
 
   bridgePayments   BridgePayment[]
+
+  // Enables the composite FK on BridgePayment that enforces invoiceId+merchantId consistency.
+  @@unique([id, merchantId])
 }
 
 // Per-token analytics for a merchant. Composite unique mirrors the contract key.
@@ -155,6 +156,9 @@ model SubscriptionPlan {
   updatedAt     DateTime       @updatedAt
 
   subscriptions Subscription[]
+
+  // Enables the composite FK on Subscription that enforces planId+merchantId consistency.
+  @@unique([id, merchantId])
 }
 
 enum SubscriptionStatus {
@@ -166,9 +170,11 @@ model Subscription {
   id             String             @id @default(uuid())
   subscriptionId Int                @unique
   planId         String
-  plan           SubscriptionPlan   @relation(fields: [planId], references: [id])
   merchantId     String
-  merchant       Merchant           @relation(fields: [merchantId], references: [id])
+  // Composite FK: DB rejects a subscription whose merchantId differs from its plan's merchantId.
+  // Prisma forbids a scalar from appearing in two @relation fields arrays, so the separate
+  // Merchant relation is intentionally absent here — reach merchant via plan.merchant.
+  plan           SubscriptionPlan   @relation(fields: [planId, merchantId], references: [id, merchantId])
   customer       String
   status         SubscriptionStatus @default(ACTIVE)
   lastCharged    DateTime?
@@ -207,9 +213,11 @@ model TokenAnalytics {
 model BridgePayment {
   id                   String   @id @default(uuid())
   invoiceId            String
-  invoice              Invoice  @relation(fields: [invoiceId], references: [id])
   merchantId           String
-  merchant             Merchant @relation(fields: [merchantId], references: [id])
+  // Composite FK: DB rejects a bridge payment whose merchantId differs from its invoice's merchantId.
+  // Prisma forbids a scalar from appearing in two @relation fields arrays, so the separate
+  // Merchant relation is intentionally absent here — reach merchant via invoice.merchant.
+  invoice              Invoice  @relation(fields: [invoiceId, merchantId], references: [id, merchantId])
   payer                String?
   sourceChain          String
   destinationChain     String

@@ -1,4 +1,4 @@
-import type { Invoice, Prisma, Status } from '@prisma/client';
+import type { Invoice, InvoiceStatus as PrismaInvoiceStatus, Prisma } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { AppError } from '../utils/errors.js';
 import { generatePaymentSlug } from '../utils/slug.js';
@@ -19,7 +19,7 @@ const InvoiceStatus = {
   PENDING: 'PENDING',
   PAID: 'PAID',
   CANCELLED: 'CANCELLED',
-} as const satisfies Record<string, Status>;
+} as const satisfies Record<string, PrismaInvoiceStatus>;
 
 /**
  * Public-facing view of an invoice. `amount` is serialized to a string because
@@ -33,7 +33,7 @@ export const sanitizeInvoice = (invoice: Invoice) => ({
   token: invoice.token,
   status: invoice.status,
   merchantId: invoice.merchantId,
-  payerEmail: invoice.payerEmail,
+  email: invoice.email,
   expiresAt: invoice.expiresAt,
   datePaid: invoice.datePaid,
   createdAt: invoice.createdAt,
@@ -52,7 +52,7 @@ export const createInvoice = async (merchantId: string, data: CreateInvoiceInput
     throw new AppError(400, 'amount must be a positive integer');
   }
 
-  const status: Status = data.isDraft ? InvoiceStatus.DRAFT : InvoiceStatus.PENDING;
+  const status: PrismaInvoiceStatus = data.isDraft ? InvoiceStatus.DRAFT : InvoiceStatus.PENDING;
   const expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
 
   for (let attempt = 0; attempt < SLUG_MAX_RETRIES; attempt++) {
@@ -63,7 +63,7 @@ export const createInvoice = async (merchantId: string, data: CreateInvoiceInput
           description: data.description.trim(),
           amount,
           token: data.token.trim(),
-          payerEmail: data.payerEmail?.trim() ?? null,
+          email: data.payerEmail?.trim() ?? null,
           expiresAt,
           status,
           paymentSlug: generatePaymentSlug(),
