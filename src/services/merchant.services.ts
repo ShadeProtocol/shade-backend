@@ -128,7 +128,11 @@ export const registerMerchant = async (merchantId: string, data: RegisterMerchan
     },
   });
 
-  await sendOtp(normalizedEmail, code, data.firstName.trim());
+  try {
+    await sendOtp(normalizedEmail, code, data.firstName.trim());
+  } catch (err) {
+    console.error('Failed to send OTP email after registration', err);
+  }
 
   return sanitizeMerchant(updatedMerchant);
 };

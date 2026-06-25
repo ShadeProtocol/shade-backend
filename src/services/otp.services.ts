@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import prisma from '../config/prisma.js';
 import { AppError } from '../utils/errors.js';
@@ -11,7 +12,7 @@ const BCRYPT_ROUNDS = 10;
 export const generateOtp = (): string => {
   const min = 10 ** (OTP_LENGTH - 1);
   const max = 10 ** OTP_LENGTH - 1;
-  return Math.floor(min + Math.random() * (max - min + 1)).toString();
+  return randomInt(min, max + 1).toString();
 };
 
 export const hashOtp = async (code: string): Promise<string> => bcrypt.hash(code, BCRYPT_ROUNDS);

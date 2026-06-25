@@ -10,6 +10,17 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 export type EmailProvider = 'console' | 'resend' | 'smtp';
 
+const EMAIL_PROVIDERS: EmailProvider[] = ['console', 'resend', 'smtp'];
+
+const parseEmailProvider = (value: string | undefined): EmailProvider => {
+  const provider = value || 'console';
+  if (!EMAIL_PROVIDERS.includes(provider as EmailProvider)) {
+    console.warn(`Invalid EMAIL_PROVIDER "${provider}", falling back to console`);
+    return 'console';
+  }
+  return provider as EmailProvider;
+};
+
 export const environment = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
@@ -23,7 +34,7 @@ export const environment = {
   },
   email: {
     from: process.env.EMAIL_FROM || 'noreply@shade.local',
-    provider: (process.env.EMAIL_PROVIDER || 'console') as EmailProvider,
+    provider: parseEmailProvider(process.env.EMAIL_PROVIDER),
     resendApiKey: process.env.RESEND_API_KEY || '',
     smtp: {
       host: process.env.SMTP_HOST || '',

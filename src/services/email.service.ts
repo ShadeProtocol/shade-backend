@@ -2,10 +2,19 @@ import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import { environment } from '../config/environment.js';
 
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 const buildOtpEmailContent = (firstName: string, code: string) => {
+  const safeFirstName = escapeHtml(firstName);
   const subject = 'Verify your Shade email';
   const html = `
-    <p>Hi ${firstName},</p>
+    <p>Hi ${safeFirstName},</p>
     <p>Your email verification code is:</p>
     <p><strong style="font-size: 24px; letter-spacing: 4px;">${code}</strong></p>
     <p>This code expires in 10 minutes.</p>
