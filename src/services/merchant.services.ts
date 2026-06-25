@@ -2,7 +2,10 @@ import { Merchant } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { AppError } from '../utils/errors.js';
 import { RegisterMerchantInput } from '../utils/validation.js';
-import { sendOtpEmail } from './otp.services.js';
+import { generateOtp, hashOtp } from './otp.services.js';
+import { sendOtp } from './email.service.js';
+
+const OTP_EXPIRY_MS = 10 * 60 * 1000;
 
 interface MerchantData {
   merchantId: number;
@@ -104,6 +107,10 @@ export const registerMerchant = async (merchantId: string, data: RegisterMerchan
     throw new AppError(409, 'Email already registered');
   }
 
+  const code = generateOtp();
+  const emailOtp = await hashOtp(code);
+  const emailOtpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+
   const updatedMerchant = await prisma.merchant.update({
     where: { id: merchantId },
     data: {
@@ -116,10 +123,12 @@ export const registerMerchant = async (merchantId: string, data: RegisterMerchan
       logo: data.logo?.trim() ?? null,
       emailVerified: false,
       registered: true,
+      emailOtp,
+      emailOtpExpiresAt,
     },
   });
 
-  await sendOtpEmail(normalizedEmail);
+  await sendOtp(normalizedEmail, code, data.firstName.trim());
 
   return sanitizeMerchant(updatedMerchant);
 };

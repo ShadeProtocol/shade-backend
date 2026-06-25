@@ -8,6 +8,8 @@ const __dirname = path.dirname(__filename);
 // Load environment variables from .env file
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
+export type EmailProvider = 'console' | 'resend' | 'smtp';
+
 export const environment = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
@@ -18,5 +20,17 @@ export const environment = {
     username: process.env.DB_USERNAME || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
     database: process.env.DB_DATABASE || 'postgres',
+  },
+  email: {
+    from: process.env.EMAIL_FROM || 'noreply@shade.local',
+    provider: (process.env.EMAIL_PROVIDER || 'console') as EmailProvider,
+    resendApiKey: process.env.RESEND_API_KEY || '',
+    smtp: {
+      host: process.env.SMTP_HOST || '',
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      user: process.env.SMTP_USER || '',
+      pass: process.env.SMTP_PASS || '',
+      secure: process.env.SMTP_SECURE === 'true',
+    },
   },
 };
