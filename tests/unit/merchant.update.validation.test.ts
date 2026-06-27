@@ -24,6 +24,10 @@ describe('validateUpdateMerchant', () => {
     expect(validateUpdateMerchant({ logo: null, webhook: null })).toEqual({});
   });
 
+  test('accepts an empty string logo as a clear', () => {
+    expect(validateUpdateMerchant({ logo: '' })).toEqual({});
+  });
+
   test('accepts an empty string webhook as a clear', () => {
     expect(validateUpdateMerchant({ webhook: '' })).toEqual({});
   });

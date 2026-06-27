@@ -23,6 +23,9 @@ const baseMerchant = {
   registered: true,
   createdAt: new Date(),
   updatedAt: new Date(),
+  // Internal relations that the sanitizer allow-list must strip from its output.
+  refreshTokens: [{ id: 'rt-1', token: 'secret-token' }],
+  apiKeys: [{ id: 'ak-1', keyHash: 'hashed-secret' }],
 };
 
 describe('getMyProfile', () => {

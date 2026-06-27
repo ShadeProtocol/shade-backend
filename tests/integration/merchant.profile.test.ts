@@ -26,6 +26,9 @@ const baseMerchant = {
   registered: true,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
+  // Internal relations that the sanitizer allow-list must strip from responses.
+  refreshTokens: [{ id: 'rt-1', token: 'secret-token' }],
+  apiKeys: [{ id: 'ak-1', keyHash: 'hashed-secret' }],
 };
 
 const authenticateAs = (merchant: Record<string, unknown>) => {
@@ -82,20 +85,28 @@ describe('PATCH /api/v1/merchants/me', () => {
     expect(response.body).toMatchObject({ firstName: 'Grace', webhook: 'https://example.com/hook' });
   });
 
-  test('silently ignores non-editable fields (address/email)', async () => {
+  test('silently ignores non-editable fields (address/email/merchantId/account)', async () => {
     authenticateAs(baseMerchant);
     prismaMock.merchant.update.mockImplementation(async (args: any) => ({ ...baseMerchant, ...args.data }));
 
     const response = await request(app)
       .patch(ME_URL)
       .set('Authorization', 'Bearer valid-token')
-      .send({ firstName: 'Grace', address: '0xHACK', email: 'evil@example.com' });
+      .send({
+        firstName: 'Grace',
+        address: '0xHACK',
+        email: 'evil@example.com',
+        merchantId: 999,
+        account: '0xHACKED',
+      });
 
     expect(response.status).toBe(200);
     const updateArg = prismaMock.merchant.update.mock.calls[0][0];
     expect(updateArg.data).toEqual({ firstName: 'Grace' });
     expect(response.body.address).toBe('0x123');
     expect(response.body.email).toBe('ada@example.com');
+    expect(response.body.merchantId).toBe(1);
+    expect(response.body.account).toBe('CCONTRACT');
   });
 
   test('returns 400 for an invalid (non-HTTPS) webhook', async () => {
