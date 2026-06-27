@@ -1,7 +1,7 @@
-import { Merchant } from '@prisma/client';
+import { Merchant, Prisma } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { AppError } from '../utils/errors.js';
-import { RegisterMerchantInput } from '../utils/validation.js';
+import { RegisterMerchantInput, UpdateMerchantInput } from '../utils/validation.js';
 import { sendOtpEmail } from './otp.services.js';
 
 interface MerchantData {
@@ -21,12 +21,14 @@ export const sanitizeMerchant = (merchant: Merchant) => ({
   merchantId: merchant.merchantId,
   email: merchant.email,
   address: merchant.address,
+  account: merchant.account,
   firstName: merchant.firstName,
   lastName: merchant.lastName,
   businessName: merchant.businessName,
   category: merchant.category,
   description: merchant.description,
   logo: merchant.logo,
+  webhook: merchant.webhook,
   active: merchant.active,
   verified: merchant.verified,
   emailVerified: merchant.emailVerified,
@@ -122,4 +124,50 @@ export const registerMerchant = async (merchantId: string, data: RegisterMerchan
   await sendOtpEmail(normalizedEmail);
 
   return sanitizeMerchant(updatedMerchant);
+};
+
+/**
+ * Returns the authenticated merchant's own profile.
+ */
+export const getMyProfile = async (id: string) => {
+  const merchant = await prisma.merchant.findUnique({ where: { id } });
+
+  if (!merchant) {
+    throw new AppError(404, 'Merchant not found');
+  }
+
+  return sanitizeMerchant(merchant);
+};
+
+/**
+ * Partially updates the authenticated merchant's editable profile fields.
+ *
+ * Only fields present in `data` are written. Strings are trimmed; an empty
+ * `logo`/`webhook` is normalized to null so the merchant can clear them.
+ * Non-editable fields are never read here, so they cannot be changed.
+ */
+export const updateMyProfile = async (id: string, data: UpdateMerchantInput) => {
+  const updateData: Prisma.MerchantUpdateInput = {};
+
+  const textFields = ['firstName', 'lastName', 'businessName', 'category', 'description'] as const;
+  for (const field of textFields) {
+    const value = data[field];
+    if (value !== undefined) {
+      updateData[field] = value.trim();
+    }
+  }
+
+  if (data.logo !== undefined) {
+    const logo = typeof data.logo === 'string' ? data.logo.trim() : data.logo;
+    updateData.logo = logo ? logo : null;
+  }
+
+  if (data.webhook !== undefined) {
+    const webhook = typeof data.webhook === 'string' ? data.webhook.trim() : data.webhook;
+    updateData.webhook = webhook ? webhook : null;
+  }
+
+  const updated = await prisma.merchant.update({ where: { id }, data: updateData });
+
+  return sanitizeMerchant(updated);
 };
