@@ -20,8 +20,7 @@ export const hashOtp = async (code: string): Promise<string> => bcrypt.hash(code
 export const verifyOtpHash = async (code: string, hash: string): Promise<boolean> =>
   bcrypt.compare(code, hash);
 
-const getLastOtpSentAt = (expiresAt: Date): Date =>
-  new Date(expiresAt.getTime() - OTP_EXPIRY_MS);
+const getLastOtpSentAt = (expiresAt: Date): Date => new Date(expiresAt.getTime() - OTP_EXPIRY_MS);
 
 /**
  * Generates a 6-digit OTP, stores its bcrypt hash with a 10-minute expiry,
