@@ -18,6 +18,7 @@ jest.unstable_mockModule('@stellar/stellar-sdk', () => ({
 }));
 
 const { default: prismaMock } = await import('../../src/config/prisma.js') as any;
+const { environment } = await import('../../src/config/environment.js');
 const {
   authenticateWallet,
   createNonce,
@@ -172,7 +173,7 @@ describe('Auth Services', () => {
       expect(token.split('.')).toHaveLength(3);
 
       const jwt = await import('jsonwebtoken');
-      const decoded = jwt.default.verify(token, 'dev-jwt-secret-change-in-production');
+      const decoded = jwt.default.verify(token, environment.jwtSecret);
       expect(decoded).toMatchObject({
         sub: 'merchant-uuid',
         address: 'GABCDEF123',
