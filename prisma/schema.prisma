@@ -29,10 +29,12 @@ model Merchant {
   webhook       String?
   active        Boolean   @default(true)
   verified      Boolean   @default(false)
-  emailVerified Boolean   @default(false)
-  registered    Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  emailVerified     Boolean   @default(false)
+  registered        Boolean   @default(false)
+  emailOtp          String?
+  emailOtpExpiresAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   refreshTokens      RefreshToken[]
   invoices           Invoice[]
