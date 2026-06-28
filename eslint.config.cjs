@@ -28,6 +28,7 @@ module.exports = [
       'build/**',
       'coverage/**',
       '**/*.d.ts',
+      'eslint.config.cjs',
     ],
     rules: {
       'prettier/prettier': 'error',
