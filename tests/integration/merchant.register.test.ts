@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 import { mockReset } from 'jest-mock-extended';
+import jwt from 'jsonwebtoken';
 import request from 'supertest';
 
 const sendOtpMock = jest.fn(async () => undefined);
@@ -20,7 +21,11 @@ jest.unstable_mockModule('../../src/services/otp.services.js', () => ({
 }));
 
 const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
+const { environment } = await import('../../src/config/environment.js');
 const { default: app } = await import('../../src/app.js');
+
+const tokenFor = (merchant: Record<string, unknown>) =>
+  jwt.sign({ sub: merchant.id as string }, environment.jwtSecret);
 
 const REGISTER_URL = '/api/v1/merchants/register';
 
@@ -57,15 +62,10 @@ const validPayload = {
 };
 
 const authenticateAs = (merchant: Record<string, unknown>) => {
-  prismaMock.refreshToken.findUnique.mockResolvedValue({
-    id: 'session-1',
-    merchantId: merchant.id,
-    token: 'valid-token',
-    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-    createdAt: new Date(),
-    merchant,
-  } as any);
+  prismaMock.merchant.findUnique.mockResolvedValue(merchant as any);
 };
+
+const authHeader = `Bearer ${tokenFor(baseMerchant)}`;
 
 describe('POST /api/v1/merchants/register', () => {
   beforeEach(() => {
@@ -77,11 +77,11 @@ describe('POST /api/v1/merchants/register', () => {
     const response = await request(app).post(REGISTER_URL).send(validPayload);
 
     expect(response.status).toBe(401);
-    expect(response.body).toEqual({ error: 'Unauthorized' });
+    expect(response.body).toEqual({ error: 'Authentication required' });
     expect(prismaMock.merchant.update).not.toHaveBeenCalled();
   });
 
-  test('returns 401 when the session token is invalid', async () => {
+  test('returns 401 when the token is invalid', async () => {
     prismaMock.refreshToken.findUnique.mockResolvedValue(null);
 
     const response = await request(app)
@@ -90,6 +90,7 @@ describe('POST /api/v1/merchants/register', () => {
       .send(validPayload);
 
     expect(response.status).toBe(401);
+    expect(response.body).toEqual({ error: 'Invalid or expired token' });
   });
 
   test('returns 200 with the merchant profile on valid payload', async () => {
@@ -103,7 +104,7 @@ describe('POST /api/v1/merchants/register', () => {
 
     const response = await request(app)
       .post(REGISTER_URL)
-      .set('Authorization', 'Bearer valid-token')
+      .set('Authorization', authHeader)
       .send(validPayload);
 
     expect(response.status).toBe(200);
@@ -129,7 +130,7 @@ describe('POST /api/v1/merchants/register', () => {
 
     const response = await request(app)
       .post(REGISTER_URL)
-      .set('Authorization', 'Bearer valid-token')
+      .set('Authorization', authHeader)
       .send(validPayload);
 
     expect(response.status).toBe(409);
@@ -143,7 +144,7 @@ describe('POST /api/v1/merchants/register', () => {
 
     const response = await request(app)
       .post(REGISTER_URL)
-      .set('Authorization', 'Bearer valid-token')
+      .set('Authorization', authHeader)
       .send(validPayload);
 
     expect(response.status).toBe(409);
@@ -155,7 +156,7 @@ describe('POST /api/v1/merchants/register', () => {
 
     const response = await request(app)
       .post(REGISTER_URL)
-      .set('Authorization', 'Bearer valid-token')
+      .set('Authorization', authHeader)
       .send({ email: 'not-an-email' });
 
     expect(response.status).toBe(400);

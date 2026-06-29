@@ -1,7 +1,9 @@
 import { mockReset } from 'jest-mock-extended';
+import jwt from 'jsonwebtoken';
 import request from 'supertest';
 
 const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
+const { environment } = await import('../../src/config/environment.js');
 const { default: app } = await import('../../src/app.js');
 
 const MERCHANT_ID = 'merchant-1';
@@ -47,17 +49,14 @@ const baseInvoice = {
 };
 
 const authenticate = () => {
-  prismaMock.refreshToken.findUnique.mockResolvedValue({
-    id: 'session-1',
-    merchantId: MERCHANT_ID,
-    token: 'valid-token',
-    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-    createdAt: new Date(),
-    merchant,
-  } as any);
+  prismaMock.merchant.findUnique.mockResolvedValue(merchant as any);
 };
 
-const auth = { Authorization: 'Bearer valid-token' };
+const accessToken = jwt.sign(
+  { sub: MERCHANT_ID, address: merchant.address },
+  environment.jwtSecret,
+);
+const auth = { Authorization: `Bearer ${accessToken}` };
 
 describe('Invoice routes', () => {
   beforeEach(() => {

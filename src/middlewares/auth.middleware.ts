@@ -65,14 +65,19 @@ export const apiKeyAuth = async (
   try {
     const token = extractBearerToken(req);
 
-    if (!token || !isApiKeyToken(token)) {
-      res.status(401).json({ error: 'Unauthorized' });
+    if (!token) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    if (!isApiKeyToken(token)) {
+      res.status(401).json({ error: 'Invalid or expired token' });
       return;
     }
 
     const merchant = await authenticateApiKey(token);
     if (!merchant) {
-      res.status(401).json({ error: 'Unauthorized' });
+      res.status(401).json({ error: 'Invalid or expired token' });
       return;
     }
 
@@ -96,12 +101,12 @@ export const authenticateSessionOnly = async (
     const token = extractBearerToken(req);
 
     if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
+      res.status(401).json({ error: 'Authentication required' });
       return;
     }
 
     if (isApiKeyToken(token)) {
-      res.status(401).json({ error: 'Unauthorized' });
+      res.status(401).json({ error: 'Invalid or expired token' });
       return;
     }
 
@@ -111,7 +116,7 @@ export const authenticateSessionOnly = async (
         : await authenticateRefreshToken(token);
 
     if (!merchant) {
-      res.status(401).json({ error: 'Unauthorized' });
+      res.status(401).json({ error: 'Invalid or expired token' });
       return;
     }
 
@@ -123,7 +128,15 @@ export const authenticateSessionOnly = async (
 };
 
 /**
- * Authenticates a merchant using refresh tokens, JWT access tokens, or API keys.
+ * Authenticates a merchant from a bearer token.
+ *
+ * Accepts JWT access tokens (signed with `JWT_SECRET`), refresh session tokens,
+ * or API keys. The resolved Merchant is attached to `req.merchant` on success.
+ *
+ * Responds with 401 when the `Authorization: Bearer <token>` header is missing
+ * or malformed (`Authentication required`), or when the token is invalid,
+ * expired, or references a merchant that no longer exists
+ * (`Invalid or expired token`).
  */
 export const authenticateMerchant = async (
   req: Request,
@@ -134,13 +147,13 @@ export const authenticateMerchant = async (
     const token = extractBearerToken(req);
 
     if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
+      res.status(401).json({ error: 'Authentication required' });
       return;
     }
 
     const merchant = await resolveMerchantFromToken(token);
     if (!merchant) {
-      res.status(401).json({ error: 'Unauthorized' });
+      res.status(401).json({ error: 'Invalid or expired token' });
       return;
     }
 

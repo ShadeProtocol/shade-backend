@@ -68,7 +68,7 @@ describe('Email OTP auth routes', () => {
       const response = await request(app).post(VERIFY_EMAIL_URL).send({ code: '123456' });
 
       expect(response.status).toBe(401);
-      expect(response.body).toEqual({ error: 'Unauthorized' });
+      expect(response.body).toEqual({ error: 'Authentication required' });
     });
 
     test('returns 400 when code is missing', async () => {
@@ -163,7 +163,7 @@ describe('Email OTP auth routes', () => {
       const response = await request(app).post(RESEND_OTP_URL);
 
       expect(response.status).toBe(401);
-      expect(response.body).toEqual({ error: 'Unauthorized' });
+      expect(response.body).toEqual({ error: 'Authentication required' });
     });
 
     test('returns 200 and re-sends OTP when cooldown has elapsed', async () => {
