@@ -1,2 +1,2 @@
 -- AlterTable
-ALTER TABLE "ApiKey" ADD COLUMN "prefix" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "ApiKey" ADD COLUMN "prefix" TEXT;

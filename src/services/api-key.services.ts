@@ -1,4 +1,4 @@
-import { ApiKey, Merchant } from '@prisma/client';
+import { Merchant } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { AppError } from '../utils/errors.js';
 import { generateApiKeyMaterial, hashApiKey, MAX_ACTIVE_API_KEYS } from '../utils/api-key.utils.js';
@@ -15,42 +15,52 @@ export type CreateApiKeyResult = ApiKeySummary & {
   key: string;
 };
 
-const toApiKeySummary = (apiKey: ApiKey): ApiKeySummary => ({
+type ApiKeyListRow = {
+  id: string;
+  prefix: string | null;
+  name: string | null;
+  lastUsedAt: Date | null;
+  createdAt: Date;
+};
+
+const toApiKeySummary = (apiKey: ApiKeyListRow): ApiKeySummary => ({
   id: apiKey.id,
-  prefix: apiKey.prefix,
+  prefix: apiKey.prefix ?? '',
   label: apiKey.name,
   lastUsedAt: apiKey.lastUsedAt,
   createdAt: apiKey.createdAt,
 });
 
-const countActiveApiKeys = async (merchantId: string): Promise<number> =>
-  prisma.apiKey.count({
-    where: {
-      merchantId,
-      revokedAt: null,
-      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-    },
-  });
+const activeApiKeyWhere = (merchantId: string) => ({
+  merchantId,
+  revokedAt: null,
+  OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+});
 
 export const createApiKey = async (
   merchantId: string,
   label?: string,
 ): Promise<CreateApiKeyResult> => {
-  const activeKeys = await countActiveApiKeys(merchantId);
-  if (activeKeys >= MAX_ACTIVE_API_KEYS) {
-    throw new AppError(400, 'Maximum of 10 active API keys allowed');
-  }
-
   const { rawKey, prefix, keyHash } = generateApiKeyMaterial();
   const normalizedLabel = label?.trim() || null;
 
-  const apiKey = await prisma.apiKey.create({
-    data: {
-      merchantId,
-      keyHash,
-      prefix,
-      name: normalizedLabel,
-    },
+  const apiKey = await prisma.$transaction(async tx => {
+    const activeKeys = await tx.apiKey.count({
+      where: activeApiKeyWhere(merchantId),
+    });
+
+    if (activeKeys >= MAX_ACTIVE_API_KEYS) {
+      throw new AppError(400, `Maximum of ${MAX_ACTIVE_API_KEYS} active API keys allowed`);
+    }
+
+    return tx.apiKey.create({
+      data: {
+        merchantId,
+        keyHash,
+        prefix,
+        name: normalizedLabel,
+      },
+    });
   });
 
   return {
@@ -66,6 +76,13 @@ export const listApiKeys = async (merchantId: string): Promise<ApiKeySummary[]> 
       revokedAt: null,
     },
     orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      prefix: true,
+      name: true,
+      lastUsedAt: true,
+      createdAt: true,
+    },
   });
 
   return apiKeys.map(toApiKeySummary);

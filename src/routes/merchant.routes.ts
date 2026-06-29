@@ -10,14 +10,14 @@ import {
   listApiKeysController,
   revokeApiKeyController,
 } from '../controllers/api-key.controllers.js';
-import { authenticateMerchant } from '../middlewares/auth.middleware.js';
+import { authenticateMerchant, authenticateSessionOnly } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 
 router.post('/register', authenticateMerchant, registerMerchantController);
-router.post('/api-keys', authenticateMerchant, createApiKeyController);
-router.get('/api-keys', authenticateMerchant, listApiKeysController);
-router.delete('/api-keys/:id', authenticateMerchant, revokeApiKeyController);
+router.post('/api-keys', authenticateSessionOnly, createApiKeyController);
+router.get('/api-keys', authenticateSessionOnly, listApiKeysController);
+router.delete('/api-keys/:id', authenticateSessionOnly, revokeApiKeyController);
 router.post('/', createMerchantController);
 router.get('/:id', getMerchantController);
 router.get('/', listMerchantsController);

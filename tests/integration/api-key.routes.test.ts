@@ -10,7 +10,7 @@ import {
 
 jest.unstable_mockModule('../../src/utils/api-key.utils.js', () => {
   const prefix = 'sk_' + 'live_';
-  const rawKey = `${prefix}testkey123456789012345678901234`;
+  const rawKey = `${prefix}testkey1234567890123456789012345`;
   return {
     __esModule: true,
     API_KEY_PREFIX: prefix,
@@ -79,6 +79,9 @@ const authenticateWithSession = () => {
 describe('Merchant API key routes', () => {
   beforeEach(() => {
     mockReset(prismaMock);
+    prismaMock.$transaction.mockImplementation(
+      async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock),
+    );
   });
 
   describe('POST /api/v1/merchants/api-keys', () => {
@@ -109,6 +112,34 @@ describe('Merchant API key routes', () => {
         lastUsedAt: null,
         createdAt: baseApiKey.createdAt.toISOString(),
       });
+    });
+
+    test('returns 400 when label is not a string', async () => {
+      authenticateWithSession();
+
+      const response = await request(app)
+        .post('/api/v1/merchants/api-keys')
+        .set('Authorization', 'Bearer valid-token')
+        .send({ label: 123 });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'label must be a string' });
+      expect(prismaMock.apiKey.create).not.toHaveBeenCalled();
+    });
+
+    test('returns 401 when authenticated with an API key', async () => {
+      prismaMock.apiKey.findUnique.mockResolvedValue({
+        ...baseApiKey,
+        merchant,
+      } as any);
+
+      const response = await request(app)
+        .post('/api/v1/merchants/api-keys')
+        .set('Authorization', `Bearer ${TEST_RAW_API_KEY}`)
+        .send({ label: 'Secondary' });
+
+      expect(response.status).toBe(401);
+      expect(prismaMock.apiKey.create).not.toHaveBeenCalled();
     });
 
     test('returns 400 when active key limit is exceeded', async () => {

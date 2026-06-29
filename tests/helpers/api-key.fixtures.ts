@@ -1,13 +1,13 @@
 /** Test fixtures split to avoid GitHub secret-scanning false positives on sk_live_ literals. */
 export const TEST_API_KEY_PREFIX = 'sk_' + 'live_';
 
-export const TEST_RAW_API_KEY = `${TEST_API_KEY_PREFIX}testkey123456789012345678901234`;
+export const TEST_RAW_API_KEY = `${TEST_API_KEY_PREFIX}testkey1234567890123456789012345`;
 
 export const TEST_KEY_PREFIX_DISPLAY = `${TEST_API_KEY_PREFIX}testkey1`;
 
 export const TEST_KEY_HASH = `hash-${TEST_RAW_API_KEY}`;
 
-export const TEST_INTEGRATION_RAW_API_KEY = `${TEST_API_KEY_PREFIX}integrationtest123456789012345678`;
+export const TEST_INTEGRATION_RAW_API_KEY = `${TEST_API_KEY_PREFIX}integrationtest1234567890123456`;
 
 export const TEST_INTEGRATION_PREFIX = `${TEST_API_KEY_PREFIX}integrat`;
 

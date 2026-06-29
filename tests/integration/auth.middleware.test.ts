@@ -95,7 +95,26 @@ describe('authenticateMerchant auth paths', () => {
     expect(prismaMock.refreshToken.findUnique).not.toHaveBeenCalled();
   });
 
-  test('accepts valid API keys and updates lastUsedAt', async () => {
+  test('accepts valid API keys on merchant routes and updates lastUsedAt', async () => {
+    prismaMock.apiKey.findUnique.mockResolvedValue({
+      ...apiKeyRecord,
+      merchant,
+    } as any);
+    prismaMock.apiKey.update.mockResolvedValue(apiKeyRecord as any);
+    prismaMock.invoice.findMany.mockResolvedValue([]);
+
+    const response = await request(app)
+      .get('/api/v1/invoices')
+      .set('Authorization', `Bearer ${rawApiKey}`);
+
+    expect(response.status).toBe(200);
+    expect(prismaMock.apiKey.update).toHaveBeenCalledWith({
+      where: { id: 'key-1' },
+      data: { lastUsedAt: expect.any(Date) },
+    });
+  });
+
+  test('rejects API keys on key-management routes', async () => {
     prismaMock.apiKey.findUnique.mockResolvedValue({
       ...apiKeyRecord,
       merchant,
@@ -107,11 +126,8 @@ describe('authenticateMerchant auth paths', () => {
       .get('/api/v1/merchants/api-keys')
       .set('Authorization', `Bearer ${rawApiKey}`);
 
-    expect(response.status).toBe(200);
-    expect(prismaMock.apiKey.update).toHaveBeenCalledWith({
-      where: { id: 'key-1' },
-      data: { lastUsedAt: expect.any(Date) },
-    });
+    expect(response.status).toBe(401);
+    expect(prismaMock.apiKey.findMany).not.toHaveBeenCalled();
   });
 
   test('returns 401 for unknown API keys', async () => {
@@ -157,6 +173,9 @@ describe('authenticateMerchant auth paths', () => {
 describe('API key management security', () => {
   beforeEach(() => {
     mockReset(prismaMock);
+    prismaMock.$transaction.mockImplementation(
+      async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock),
+    );
   });
 
   test('POST stores only hash in database, never raw key', async () => {
@@ -214,6 +233,13 @@ describe('API key management security', () => {
     expect(prismaMock.apiKey.findMany).toHaveBeenCalledWith({
       where: { merchantId: merchant.id, revokedAt: null },
       orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        prefix: true,
+        name: true,
+        lastUsedAt: true,
+        createdAt: true,
+      },
     });
   });
 
@@ -254,32 +280,19 @@ describe('API key management security', () => {
     expect(response.status).toBe(401);
   });
 
-  test('API key can create additional API keys when under limit', async () => {
+  test('API key cannot create additional API keys', async () => {
     prismaMock.apiKey.findUnique.mockResolvedValue({
       ...apiKeyRecord,
       merchant,
     } as any);
-    prismaMock.apiKey.update.mockResolvedValue(apiKeyRecord as any);
-    prismaMock.apiKey.count.mockResolvedValue(1);
-    prismaMock.apiKey.create.mockImplementation(async (args: any) => ({
-      id: 'key-2',
-      merchantId: merchant.id,
-      keyHash: args.data.keyHash,
-      prefix: args.data.prefix,
-      name: args.data.name,
-      lastUsedAt: null,
-      expiresAt: null,
-      revokedAt: null,
-      createdAt: new Date('2026-06-27T14:00:00.000Z'),
-    }));
 
     const response = await request(app)
       .post('/api/v1/merchants/api-keys')
       .set('Authorization', `Bearer ${rawApiKey}`)
       .send({ label: 'Secondary' });
 
-    expect(response.status).toBe(201);
-    expect(response.body.label).toBe('Secondary');
+    expect(response.status).toBe(401);
+    expect(prismaMock.apiKey.create).not.toHaveBeenCalled();
     expect(prismaMock.refreshToken.findUnique).not.toHaveBeenCalled();
   });
 });

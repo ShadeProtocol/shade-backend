@@ -5,6 +5,17 @@ import { environment } from '../config/environment.js';
 import { authenticateApiKey } from '../services/api-key.services.js';
 import { isApiKeyToken } from '../utils/api-key.utils.js';
 
+const extractBearerToken = (req: Request): string | null => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.slice('Bearer '.length).trim();
+  return token || null;
+};
+
 const authenticateRefreshToken = async (token: string) => {
   const session = await prisma.refreshToken.findUnique({
     where: { token },
@@ -31,6 +42,18 @@ const authenticateJwt = async (token: string) => {
   }
 };
 
+const resolveMerchantFromToken = async (token: string) => {
+  if (isApiKeyToken(token)) {
+    return authenticateApiKey(token);
+  }
+
+  if (token.split('.').length === 3) {
+    return authenticateJwt(token);
+  }
+
+  return authenticateRefreshToken(token);
+};
+
 /**
  * Authenticates API key bearer tokens, updates lastUsedAt, and attaches the merchant.
  */
@@ -40,14 +63,8 @@ export const apiKeyAuth = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
+    const token = extractBearerToken(req);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const token = authHeader.slice('Bearer '.length).trim();
     if (!token || !isApiKeyToken(token)) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
@@ -62,7 +79,46 @@ export const apiKeyAuth = async (
     req.merchant = merchant;
     next();
   } catch {
-    res.status(401).json({ error: 'Unauthorized' });
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+/**
+ * Authenticates a merchant using refresh tokens or JWT access tokens only.
+ * API keys are rejected to prevent key-management operations via API keys.
+ */
+export const authenticateSessionOnly = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const token = extractBearerToken(req);
+
+    if (!token) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    if (isApiKeyToken(token)) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const merchant =
+      token.split('.').length === 3
+        ? await authenticateJwt(token)
+        : await authenticateRefreshToken(token);
+
+    if (!merchant) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    req.merchant = merchant;
+    next();
+  } catch {
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 };
 
@@ -75,29 +131,14 @@ export const authenticateMerchant = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
+    const token = extractBearerToken(req);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const token = authHeader.slice('Bearer '.length).trim();
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
-    let merchant = null;
-
-    if (isApiKeyToken(token)) {
-      merchant = await authenticateApiKey(token);
-    } else if (token.split('.').length === 3) {
-      merchant = await authenticateJwt(token);
-    } else {
-      merchant = await authenticateRefreshToken(token);
-    }
-
+    const merchant = await resolveMerchantFromToken(token);
     if (!merchant) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
@@ -106,6 +147,6 @@ export const authenticateMerchant = async (
     req.merchant = merchant;
     next();
   } catch {
-    res.status(401).json({ error: 'Unauthorized' });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 };

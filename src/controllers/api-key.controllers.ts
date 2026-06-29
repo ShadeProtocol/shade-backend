@@ -10,6 +10,11 @@ export const createApiKeyController = async (req: Request, res: Response): Promi
     return;
   }
 
+  if (req.body?.label !== undefined && typeof req.body.label !== 'string') {
+    res.status(400).json({ error: 'label must be a string' });
+    return;
+  }
+
   const label = typeof req.body?.label === 'string' ? req.body.label : undefined;
 
   try {

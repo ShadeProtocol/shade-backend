@@ -8,7 +8,7 @@ import {
 
 jest.unstable_mockModule('../../src/utils/api-key.utils.js', () => {
   const prefix = 'sk_' + 'live_';
-  const rawKey = `${prefix}testkey123456789012345678901234`;
+  const rawKey = `${prefix}testkey1234567890123456789012345`;
   return {
     __esModule: true,
     API_KEY_PREFIX: prefix,
@@ -46,6 +46,9 @@ const baseApiKeyRecord = {
 describe('api-key.services', () => {
   beforeEach(() => {
     mockReset(prismaMock);
+    prismaMock.$transaction.mockImplementation(
+      async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock),
+    );
   });
 
   test('createApiKey stores hash and returns raw key once', async () => {
@@ -88,6 +91,13 @@ describe('api-key.services', () => {
     expect(prismaMock.apiKey.findMany).toHaveBeenCalledWith({
       where: { merchantId, revokedAt: null },
       orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        prefix: true,
+        name: true,
+        lastUsedAt: true,
+        createdAt: true,
+      },
     });
     expect(result).toEqual([
       {
@@ -111,6 +121,9 @@ describe('api-key.services', () => {
 
     await revokeApiKey(merchantId, 'key-1');
 
+    expect(prismaMock.apiKey.findFirst).toHaveBeenCalledWith({
+      where: { id: 'key-1', merchantId },
+    });
     expect(prismaMock.apiKey.update).toHaveBeenCalledWith({
       where: { id: 'key-1' },
       data: { revokedAt: expect.any(Date) },
@@ -135,6 +148,10 @@ describe('api-key.services', () => {
 
     const result = await authenticateApiKey(TEST_RAW_API_KEY);
 
+    expect(prismaMock.apiKey.findUnique).toHaveBeenCalledWith({
+      where: { keyHash: TEST_KEY_HASH },
+      include: { merchant: true },
+    });
     expect(result).toEqual(merchant);
     expect(prismaMock.apiKey.update).toHaveBeenCalledWith({
       where: { id: 'key-1' },
