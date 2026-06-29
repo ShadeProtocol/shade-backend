@@ -3,12 +3,21 @@ import { mockReset } from 'jest-mock-extended';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
 
-const sendOtpEmailMock = jest.fn(async (_email: string) => '123456');
+const sendOtpMock = jest.fn(async () => undefined);
+
+jest.unstable_mockModule('../../src/services/email.service.js', () => ({
+  __esModule: true,
+  sendOtp: sendOtpMock,
+}));
 
 jest.unstable_mockModule('../../src/services/otp.services.js', () => ({
   __esModule: true,
-  sendOtpEmail: sendOtpEmailMock,
   generateOtp: () => '123456',
+  hashOtp: async () => 'hashed-otp',
+  verifyOtpHash: async () => true,
+  issueEmailOtp: jest.fn(),
+  verifyEmailOtp: jest.fn(),
+  resendEmailOtp: jest.fn(),
 }));
 
 const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
@@ -37,6 +46,8 @@ const baseMerchant = {
   verified: false,
   emailVerified: false,
   registered: false,
+  emailOtp: null,
+  emailOtpExpiresAt: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -59,7 +70,7 @@ const authHeader = `Bearer ${tokenFor(baseMerchant)}`;
 describe('POST /api/v1/merchants/register', () => {
   beforeEach(() => {
     mockReset(prismaMock);
-    sendOtpEmailMock.mockClear();
+    sendOtpMock.mockClear();
   });
 
   test('returns 401 for unauthenticated requests', async () => {
@@ -71,6 +82,8 @@ describe('POST /api/v1/merchants/register', () => {
   });
 
   test('returns 401 when the token is invalid', async () => {
+    prismaMock.refreshToken.findUnique.mockResolvedValue(null);
+
     const response = await request(app)
       .post(REGISTER_URL)
       .set('Authorization', 'Bearer bad-token')
@@ -104,7 +117,7 @@ describe('POST /api/v1/merchants/register', () => {
       emailVerified: false,
       registered: true,
     });
-    expect(sendOtpEmailMock).toHaveBeenCalledWith('ada@example.com');
+    expect(sendOtpMock).toHaveBeenCalledWith('ada@example.com', '123456', 'Ada');
   });
 
   test('returns 409 when the email is already registered', async () => {
