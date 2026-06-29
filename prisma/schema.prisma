@@ -125,7 +125,8 @@ model Invoice {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
-  bridgePayments   BridgePayment[]
+  bridgePayments       BridgePayment[]
+  paymentConfirmations PaymentConfirmation[]
 
   // Enables the composite FK on BridgePayment that enforces invoiceId+merchantId consistency.
   @@unique([id, merchantId])
@@ -229,4 +230,16 @@ model BridgePayment {
   destinationRecipient String
   memo                 String?
   createdAt            DateTime @default(now())
+}
+
+model PaymentConfirmation {
+  id           String   @id @default(uuid())
+  invoiceId    String
+  merchantId   String
+  // Composite FK: DB rejects a payment confirmation whose merchantId differs from its invoice's merchantId.
+  invoice      Invoice  @relation(fields: [invoiceId, merchantId], references: [id, merchantId])
+  payerAddress   String
+  txHash         String?
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
 }
