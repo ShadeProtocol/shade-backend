@@ -13,7 +13,20 @@ const InvoiceStatus = {
 export const resolveInvoiceBySlug = async (slug: string) => {
   const invoice = await prisma.invoice.findUnique({
     where: { paymentSlug: slug },
-    include: { merchant: true },
+    select: {
+      paymentSlug: true,
+      description: true,
+      amount: true,
+      token: true,
+      status: true,
+      expiresAt: true,
+      pricingMode: true,
+      merchant: {
+        select: {
+          businessName: true,
+        },
+      },
+    },
   });
 
   if (!invoice) {
@@ -45,34 +58,41 @@ export const resolveInvoiceBySlug = async (slug: string) => {
 };
 
 export const confirmPayment = async (slug: string, payerAddress: string, txHash?: string) => {
-  const invoice = await prisma.invoice.findUnique({
-    where: { paymentSlug: slug },
+  return await prisma.$transaction(async tx => {
+    const invoice = await tx.invoice.findUnique({
+      where: { paymentSlug: slug },
+    });
+
+    if (!invoice) {
+      throw new AppError(404, 'Invoice not found');
+    }
+
+    if (
+      invoice.status === InvoiceStatus.CANCELLED ||
+      invoice.status === InvoiceStatus.PAID ||
+      invoice.status === InvoiceStatus.REFUNDED
+    ) {
+      throw new AppError(410, 'Invoice is no longer available');
+    }
+
+    if (invoice.expiresAt && invoice.expiresAt < new Date()) {
+      throw new AppError(410, 'expired');
+    }
+
+    const idempotencyKey = `${invoice.id}-${payerAddress}-${txHash || 'none'}`;
+
+    const confirmation = await tx.paymentConfirmation.upsert({
+      where: { idempotencyKey },
+      update: {},
+      create: {
+        invoiceId: invoice.id,
+        merchantId: invoice.merchantId,
+        payerAddress,
+        txHash: txHash || null,
+        idempotencyKey,
+      },
+    });
+
+    return confirmation;
   });
-
-  if (!invoice) {
-    throw new AppError(404, 'Invoice not found');
-  }
-
-  if (
-    invoice.status === InvoiceStatus.CANCELLED ||
-    invoice.status === InvoiceStatus.PAID ||
-    invoice.status === InvoiceStatus.REFUNDED
-  ) {
-    throw new AppError(410, 'Invoice is no longer available');
-  }
-
-  if (invoice.expiresAt && invoice.expiresAt < new Date()) {
-    throw new AppError(410, 'expired');
-  }
-
-  const confirmation = await prisma.paymentConfirmation.create({
-    data: {
-      invoiceId: invoice.id,
-      merchantId: invoice.merchantId,
-      payerAddress,
-      txHash: txHash || null,
-    },
-  });
-
-  return confirmation;
 };

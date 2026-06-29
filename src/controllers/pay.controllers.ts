@@ -30,7 +30,7 @@ export const confirmPaymentController = async (req: Request, res: Response): Pro
       return;
     }
 
-    if (txHash && typeof txHash !== 'string') {
+    if (txHash !== undefined && typeof txHash !== 'string') {
       res.status(400).json({ error: 'txHash must be a string if provided' });
       return;
     }

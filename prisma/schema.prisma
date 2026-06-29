@@ -237,7 +237,8 @@ model PaymentConfirmation {
   merchantId   String
   // Composite FK: DB rejects a payment confirmation whose merchantId differs from its invoice's merchantId.
   invoice      Invoice  @relation(fields: [invoiceId, merchantId], references: [id, merchantId])
-  payerAddress String
-  txHash       String?
-  createdAt    DateTime @default(now())
+  payerAddress   String
+  txHash         String?
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
 }
