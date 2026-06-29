@@ -71,6 +71,7 @@ model ApiKey {
   merchantId String
   merchant   Merchant  @relation(fields: [merchantId], references: [id])
   keyHash    String    @unique
+  prefix     String
   name       String?
   lastUsedAt DateTime?
   expiresAt  DateTime?
