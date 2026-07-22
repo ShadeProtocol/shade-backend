@@ -235,4 +235,16 @@ export const applyInvoicePayment = async (
       ...(fullyPaid ? { datePaid: paidAt } : {}),
     },
   });
+
+  const transactionCreate = prisma.transaction.create({
+    data: {
+      transactionType: TransactionType.INVOICE_PAYMENT,
+      refId: onChainInvoiceId,
+      amount: paidDelta,
+      token: event.token,
+      description: `Invoice payment for #${event.invoiceId}`,
+      merchantId: invoice.merchantId,
+      date: paidAt,
+    },
+  });
 };
