@@ -187,4 +187,18 @@ export const applyInvoicePayment = async (
   console.info(
     `[indexer] InvoicePaid received invoice=${event.invoiceId} amount=${event.amount} tx=${txHash}`,
   );
+
+  // Look up by the on-chain invoice id (`Invoice.invoiceId`, unique), NOT the
+  // internal uuid `Invoice.id`.
+  const onChainInvoiceId = Number(event.invoiceId);
+  const invoice = await prisma.invoice.findUnique({
+    where: { invoiceId: onChainInvoiceId },
+  });
+
+  if (!invoice) {
+    console.warn(
+      `[indexer] InvoicePaid for unknown invoiceId=${event.invoiceId} (tx=${txHash}); skipping`,
+    );
+    return;
+  }
 };
