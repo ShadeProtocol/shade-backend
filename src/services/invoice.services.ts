@@ -201,4 +201,17 @@ export const applyInvoicePayment = async (
     );
     return;
   }
+
+  // The Transaction FK and invoice ownership use the DB merchant uuid
+  // (`invoice.merchantId`), NOT the on-chain `event.merchantId` (a u64 chain id).
+  const merchant = await prisma.merchant.findUnique({
+    where: { id: invoice.merchantId },
+  });
+
+  if (!merchant) {
+    console.warn(
+      `[indexer] InvoicePaid: merchant ${invoice.merchantId} for invoice ${invoice.id} not found (tx=${txHash}); skipping`,
+    );
+    return;
+  }
 };
