@@ -1,4 +1,9 @@
-import type { Invoice, InvoiceStatus as PrismaInvoiceStatus, Prisma } from '@prisma/client';
+import type {
+  Invoice,
+  InvoiceStatus as PrismaInvoiceStatus,
+  TransactionType as PrismaTransactionType,
+  Prisma,
+} from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { AppError } from '../utils/errors.js';
 import { generatePaymentSlug } from '../utils/slug.js';
@@ -18,8 +23,15 @@ const InvoiceStatus = {
   DRAFT: 'DRAFT',
   PENDING: 'PENDING',
   PAID: 'PAID',
+  PARTIALLY_PAID: 'PARTIALLY_PAID',
   CANCELLED: 'CANCELLED',
 } as const satisfies Record<string, PrismaInvoiceStatus>;
+
+// Same local-constant pattern for the `TransactionType` enum.
+const TransactionType = {
+  INVOICE_PAYMENT: 'INVOICE_PAYMENT',
+  SUBSCRIPTION_CHARGE: 'SUBSCRIPTION_CHARGE',
+} as const satisfies Record<string, PrismaTransactionType>;
 
 /**
  * Public-facing view of an invoice. `amount` is serialized to a string because
