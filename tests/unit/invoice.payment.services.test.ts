@@ -94,4 +94,25 @@ describe('applyInvoicePayment', () => {
     expect(prismaMock.transaction.create).not.toHaveBeenCalled();
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
+
+  test('creates an INVOICE_PAYMENT transaction with the correct fields', async () => {
+    prismaMock.invoice.findUnique.mockResolvedValue({ ...baseInvoice, amount: 10000n, amountPaid: 0n });
+    prismaMock.merchant.findUnique.mockResolvedValue({ id: MERCHANT_ID });
+
+    await applyInvoicePayment(
+      { ...baseEvent, amount: '10000', token: 'CTOKEN', timestamp: 1_760_000_000 },
+      TX_HASH,
+    );
+
+    const txArgs = prismaMock.transaction.create.mock.calls[0][0];
+    expect(txArgs.data).toMatchObject({
+      transactionType: 'INVOICE_PAYMENT',
+      refId: 42,
+      amount: 10000n,
+      token: 'CTOKEN',
+      merchantId: MERCHANT_ID,
+      description: 'Invoice payment for #42',
+    });
+    expect(txArgs.data.date).toEqual(new Date(1_760_000_000 * 1000));
+  });
 });
