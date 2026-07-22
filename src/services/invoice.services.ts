@@ -168,6 +168,30 @@ export const voidInvoice = async (merchantId: string, id: string) => {
   return sanitizeInvoice(updated);
 };
 
+interface PaymentState {
+  amountPaid: bigint;
+  status: PrismaInvoiceStatus;
+  fullyPaid: boolean;
+}
+
+/**
+ * Pure computation of an invoice's new paid state after applying a payment.
+ * Extracted so the money math is unit-testable without touching the database.
+ */
+const computePaymentState = (
+  currentAmountPaid: bigint,
+  invoiceAmount: bigint,
+  delta: bigint,
+): PaymentState => {
+  const amountPaid = currentAmountPaid + delta;
+  const fullyPaid = amountPaid >= invoiceAmount;
+  return {
+    amountPaid,
+    fullyPaid,
+    status: fullyPaid ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID,
+  };
+};
+
 /**
  * Applies a decoded on-chain `InvoicePaidEvent` to the database.
  *
@@ -217,10 +241,11 @@ export const applyInvoicePayment = async (
 
   // i128 on-chain amount -> BigInt for exact arithmetic against BigInt columns.
   const paidDelta = BigInt(event.amount);
-  const amountPaid = invoice.amountPaid + paidDelta;
-
-  const fullyPaid = amountPaid >= invoice.amount;
-  const status = fullyPaid ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID;
+  const { amountPaid, fullyPaid, status } = computePaymentState(
+    invoice.amountPaid,
+    invoice.amount,
+    paidDelta,
+  );
 
   // Ledger timestamp is seconds since epoch; JS Date wants milliseconds.
   const paidAt = new Date(event.timestamp * 1000);
