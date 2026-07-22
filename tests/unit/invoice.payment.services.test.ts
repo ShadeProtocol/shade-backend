@@ -115,4 +115,17 @@ describe('applyInvoicePayment', () => {
     });
     expect(txArgs.data.date).toEqual(new Date(1_760_000_000 * 1000));
   });
+
+  test('missing merchant logs a warning and skips all writes', async () => {
+    prismaMock.invoice.findUnique.mockResolvedValue({ ...baseInvoice });
+    prismaMock.merchant.findUnique.mockResolvedValue(null);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(applyInvoicePayment(baseEvent, TX_HASH)).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalled();
+    expect(prismaMock.invoice.update).not.toHaveBeenCalled();
+    expect(prismaMock.transaction.create).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
 });
