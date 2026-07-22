@@ -218,4 +218,7 @@ export const applyInvoicePayment = async (
   // i128 on-chain amount -> BigInt for exact arithmetic against BigInt columns.
   const paidDelta = BigInt(event.amount);
   const amountPaid = invoice.amountPaid + paidDelta;
+
+  const fullyPaid = amountPaid >= invoice.amount;
+  const status = fullyPaid ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID;
 };
