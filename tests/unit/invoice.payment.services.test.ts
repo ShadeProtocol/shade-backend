@@ -69,4 +69,29 @@ describe('applyInvoicePayment', () => {
     expect('datePaid' in updateArgs.data).toBe(false);
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
   });
+
+  test('full payment sets PAID and stamps datePaid from event timestamp', async () => {
+    prismaMock.invoice.findUnique.mockResolvedValue({ ...baseInvoice, amount: 10000n, amountPaid: 6000n });
+    prismaMock.merchant.findUnique.mockResolvedValue({ id: MERCHANT_ID });
+
+    await applyInvoicePayment({ ...baseEvent, amount: '4000', timestamp: 1_760_000_000 }, TX_HASH);
+
+    const updateArgs = prismaMock.invoice.update.mock.calls[0][0];
+    expect(updateArgs.data.status).toBe('PAID');
+    expect(updateArgs.data.amountPaid).toBe(10000n);
+    expect(updateArgs.data.datePaid).toEqual(new Date(1_760_000_000 * 1000));
+  });
+
+  test('missing invoice logs a warning and returns without writing or throwing', async () => {
+    prismaMock.invoice.findUnique.mockResolvedValue(null);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(applyInvoicePayment(baseEvent, TX_HASH)).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalled();
+    expect(prismaMock.merchant.findUnique).not.toHaveBeenCalled();
+    expect(prismaMock.invoice.update).not.toHaveBeenCalled();
+    expect(prismaMock.transaction.create).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
 });
