@@ -247,4 +247,12 @@ export const applyInvoicePayment = async (
       date: paidAt,
     },
   });
+
+  // Invoice state and the transaction record commit together or not at all.
+  await prisma.$transaction([invoiceUpdate, transactionCreate]);
+
+  console.info(
+    `[indexer] InvoicePaid applied invoice=${invoice.id} status=${status} ` +
+      `amountPaid=${amountPaid.toString()} tx=${txHash}`,
+  );
 };
