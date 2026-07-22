@@ -221,4 +221,18 @@ export const applyInvoicePayment = async (
 
   const fullyPaid = amountPaid >= invoice.amount;
   const status = fullyPaid ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID;
+
+  // Ledger timestamp is seconds since epoch; JS Date wants milliseconds.
+  const paidAt = new Date(event.timestamp * 1000);
+
+  const invoiceUpdate = prisma.invoice.update({
+    where: { id: invoice.id },
+    data: {
+      status,
+      payer: event.payer,
+      amountPaid,
+      // Only stamp datePaid once the invoice is fully settled.
+      ...(fullyPaid ? { datePaid: paidAt } : {}),
+    },
+  });
 };
