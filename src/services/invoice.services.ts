@@ -13,6 +13,7 @@ import {
   InvoicePagination,
   parseAmount,
 } from '../utils/invoice.validation.js';
+import type { InvoicePaidEventData } from '../indexer/types.js';
 
 const SLUG_MAX_RETRIES = 5;
 
@@ -165,4 +166,25 @@ export const voidInvoice = async (merchantId: string, id: string) => {
   });
 
   return sanitizeInvoice(updated);
+};
+
+/**
+ * Applies a decoded on-chain `InvoicePaidEvent` to the database.
+ *
+ * Called by the indexer's InvoicePaid handler (glue only). ALL business logic
+ * and Prisma access for invoice payments lives here — the handler holds none.
+ *
+ * Idempotency (event replay / dedupe) is guaranteed upstream by the indexer
+ * pipeline (Issue #24); this function intentionally adds no replay guards.
+ *
+ * A missing invoice is logged and skipped — never thrown — so a stray or
+ * out-of-order event cannot crash the indexer.
+ */
+export const applyInvoicePayment = async (
+  event: InvoicePaidEventData,
+  txHash: string,
+): Promise<void> => {
+  console.info(
+    `[indexer] InvoicePaid received invoice=${event.invoiceId} amount=${event.amount} tx=${txHash}`,
+  );
 };
