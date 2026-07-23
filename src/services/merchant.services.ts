@@ -4,6 +4,7 @@ import { AppError } from '../utils/errors.js';
 import { RegisterMerchantInput, UpdateMerchantInput } from '../utils/validation.js';
 import { generateOtp, hashOtp } from './otp.services.js';
 import { sendOtp } from './email.service.js';
+import { Keypair } from '@stellar/stellar-sdk';
 
 const OTP_EXPIRY_MS = 10 * 60 * 1000;
 
@@ -150,6 +151,41 @@ export const getMyProfile = async (id: string) => {
   }
 
   return sanitizeMerchant(merchant);
+};
+
+/**
+ * Generates a fresh Ed25519 signing keypair for the merchant.
+ *
+ * Persists ONLY the hex-encoded 32-byte public key to `Merchant.merchantKey`,
+ * overwriting any previous value (unconditional generate-and-replace). Returns
+ * both halves; the hex-encoded 32-byte private key is returned exactly once and
+ * is never written to the database or logged.
+ *
+ * Uploading the public key on-chain (`set_merchant_key`) and signing invoices
+ * with the private key are done client/SDK-side and are out of scope here.
+ */
+export const generateMerchantSigningKey = async (id: string) => {
+  const merchant = await prisma.merchant.findUnique({ where: { id } });
+
+  if (!merchant) {
+    throw new AppError(404, 'Merchant not found');
+  }
+
+  const keypair = Keypair.random();
+  const publicKey = Buffer.from(keypair.rawPublicKey()).toString('hex');
+  const privateKey = Buffer.from(keypair.rawSecretKey()).toString('hex');
+
+  await prisma.merchant.update({
+    where: { id },
+    data: { merchantKey: publicKey },
+  });
+
+  // Audit only — never include the private key here.
+  console.info(
+    `[merchant] signing key ${merchant.merchantKey ? 'rotated' : 'created'} for merchant ${id}`,
+  );
+
+  return { publicKey, privateKey };
 };
 
 /**
