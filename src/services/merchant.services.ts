@@ -26,6 +26,7 @@ export const sanitizeMerchant = (merchant: Merchant) => ({
   email: merchant.email,
   address: merchant.address,
   account: merchant.account,
+  merchantKey: merchant.merchantKey,
   firstName: merchant.firstName,
   lastName: merchant.lastName,
   businessName: merchant.businessName,
