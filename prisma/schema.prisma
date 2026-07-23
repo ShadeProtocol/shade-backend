@@ -19,6 +19,7 @@ model Merchant {
   merchantId    Int       @unique
   address       String    @unique
   account       String?
+  merchantKey   String?   @unique
   email         String?   @unique
   firstName     String?
   lastName      String?
