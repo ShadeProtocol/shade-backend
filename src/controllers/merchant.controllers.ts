@@ -6,6 +6,7 @@ import {
   registerMerchant,
   getMyProfile,
   updateMyProfile,
+  generateMerchantSigningKey,
 } from '../services/merchant.services.js';
 import { validateRegisterMerchant, validateUpdateMerchant } from '../utils/validation.js';
 import { AppError } from '../utils/errors.js';
@@ -74,6 +75,26 @@ export const getMyProfileController = async (req: Request, res: Response): Promi
   try {
     const profile = await getMyProfile(merchant.id);
     res.status(200).json(profile);
+  } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+export const generateSigningKeyController = async (req: Request, res: Response): Promise<void> => {
+  const merchant = req.merchant;
+
+  if (!merchant) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  try {
+    const keys = await generateMerchantSigningKey(merchant.id);
+    res.status(201).json(keys);
   } catch (error) {
     if (error instanceof AppError) {
       res.status(error.statusCode).json({ error: error.message });
