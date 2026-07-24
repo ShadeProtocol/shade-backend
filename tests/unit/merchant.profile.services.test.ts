@@ -53,7 +53,10 @@ describe('updateMyProfile', () => {
   beforeEach(() => mockReset(prismaMock));
 
   test('writes only the editable fields present in the payload, trimmed', async () => {
-    prismaMock.merchant.update.mockImplementation(async (args: any) => ({ ...baseMerchant, ...args.data }));
+    prismaMock.merchant.update.mockImplementation(async (args: any) => ({
+      ...baseMerchant,
+      ...args.data,
+    }));
 
     await updateMyProfile('uuid-1', {
       firstName: '  Grace  ',
@@ -67,7 +70,10 @@ describe('updateMyProfile', () => {
   });
 
   test('normalizes a cleared logo/webhook to null', async () => {
-    prismaMock.merchant.update.mockImplementation(async (args: any) => ({ ...baseMerchant, ...args.data }));
+    prismaMock.merchant.update.mockImplementation(async (args: any) => ({
+      ...baseMerchant,
+      ...args.data,
+    }));
 
     await updateMyProfile('uuid-1', { logo: '', webhook: null });
 
@@ -78,11 +84,31 @@ describe('updateMyProfile', () => {
   });
 
   test('returns the sanitized updated profile', async () => {
-    prismaMock.merchant.update.mockImplementation(async (args: any) => ({ ...baseMerchant, ...args.data }));
+    prismaMock.merchant.update.mockImplementation(async (args: any) => ({
+      ...baseMerchant,
+      ...args.data,
+    }));
 
     const result = await updateMyProfile('uuid-1', { businessName: 'New Co' });
 
     expect(result).toMatchObject({ businessName: 'New Co' });
     expect(result).not.toHaveProperty('refreshTokens');
+  });
+
+  test('never writes merchantKey even if the caller smuggles it into the payload', async () => {
+    prismaMock.merchant.update.mockImplementation(async (args: any) => ({
+      ...baseMerchant,
+      ...args.data,
+    }));
+
+    // A profile update must not be able to overwrite the signing key.
+    await updateMyProfile('uuid-1', {
+      businessName: 'New Co',
+      merchantKey: 'attacker-controlled-key',
+    } as any);
+
+    const updateArgs = prismaMock.merchant.update.mock.calls[0][0];
+    expect(updateArgs.data).not.toHaveProperty('merchantKey');
+    expect(updateArgs).toEqual({ where: { id: 'uuid-1' }, data: { businessName: 'New Co' } });
   });
 });

@@ -6,6 +6,7 @@ import {
   registerMerchantController,
   getMyProfileController,
   updateMyProfileController,
+  generateSigningKeyController,
 } from '../controllers/merchant.controllers.js';
 import {
   createApiKeyController,
@@ -19,6 +20,7 @@ const router = Router();
 router.post('/register', authenticateMerchant, registerMerchantController);
 router.get('/me', authenticateMerchant, getMyProfileController);
 router.patch('/me', authenticateMerchant, updateMyProfileController);
+router.post('/signing-key', authenticateSessionOnly, generateSigningKeyController);
 router.post('/api-keys', authenticateSessionOnly, createApiKeyController);
 router.get('/api-keys', authenticateSessionOnly, listApiKeysController);
 router.delete('/api-keys/:id', authenticateSessionOnly, revokeApiKeyController);
