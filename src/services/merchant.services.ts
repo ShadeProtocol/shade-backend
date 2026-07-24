@@ -176,10 +176,17 @@ export const generateMerchantSigningKey = async (id: string) => {
   const publicKey = Buffer.from(keypair.rawPublicKey()).toString('hex');
   const privateKey = Buffer.from(keypair.rawSecretKey()).toString('hex');
 
-  await prisma.merchant.update({
-    where: { id },
+  // Optimistic concurrency: only replace the key we just read. If a concurrent
+  // rotation already changed it, no row matches and we reject rather than return
+  // a private key whose public half is no longer the one persisted.
+  const { count } = await prisma.merchant.updateMany({
+    where: { id, merchantKey: merchant.merchantKey },
     data: { merchantKey: publicKey },
   });
+
+  if (count !== 1) {
+    throw new AppError(409, 'Signing key was changed concurrently; please retry');
+  }
 
   // Audit only — never include the private key here.
   console.info(

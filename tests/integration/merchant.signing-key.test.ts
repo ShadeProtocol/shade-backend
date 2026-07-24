@@ -86,7 +86,7 @@ describe('POST /api/v1/merchants/signing-key', () => {
   test('returns 201 with hex public + private, persisting only the public key', async () => {
     authenticateWithSession();
     prismaMock.merchant.findUnique.mockResolvedValue({ ...merchant });
-    prismaMock.merchant.update.mockResolvedValue({ ...merchant });
+    prismaMock.merchant.updateMany.mockResolvedValue({ count: 1 });
 
     const response = await request(app)
       .post('/api/v1/merchants/signing-key')
@@ -96,7 +96,7 @@ describe('POST /api/v1/merchants/signing-key', () => {
     expect(response.body.publicKey).toMatch(HEX32);
     expect(response.body.privateKey).toMatch(HEX32);
 
-    const updateArgs = prismaMock.merchant.update.mock.calls[0][0];
+    const updateArgs = prismaMock.merchant.updateMany.mock.calls[0][0];
     expect(updateArgs.data).toEqual({ merchantKey: response.body.publicKey });
     expect(JSON.stringify(updateArgs)).not.toContain(response.body.privateKey);
   });
