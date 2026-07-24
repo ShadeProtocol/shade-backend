@@ -29,7 +29,7 @@ export const createChallengeController = async (req: Request, res: Response) => 
 
     const result = await createNonce(address);
     res.status(200).json(result);
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
