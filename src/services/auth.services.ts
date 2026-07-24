@@ -17,7 +17,11 @@ export function buildChallengeMessage(address: string, nonce: string, createdAt:
 }
 
 export async function createNonce(address: string) {
-  const nonce = crypto.randomUUID();
+  await prisma.authNonce.deleteMany({
+    where: { expiresAt: { lt: new Date() } },
+  });
+
+  const nonce = crypto.randomBytes(32).toString('hex');
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + NONCE_EXPIRY_MS);
   const message = buildChallengeMessage(address, nonce, createdAt);
@@ -26,7 +30,11 @@ export async function createNonce(address: string) {
     data: { address, nonce, message, expiresAt },
   });
 
-  return { nonce: authNonce.nonce, message: authNonce.message, expiresAt: authNonce.expiresAt };
+  return {
+    message: authNonce.message,
+    nonce: authNonce.nonce,
+    expiresAt: authNonce.expiresAt,
+  };
 }
 
 export async function verifySignature(address: string, nonce: string, rawSignature: string) {

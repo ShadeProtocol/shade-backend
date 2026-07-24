@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { StrKey } from '@stellar/stellar-sdk';
 import { createNonce, authenticateWallet } from '../services/auth.services.js';
 import { resendEmailOtp, verifyEmailOtp } from '../services/otp.services.js';
 import { sanitizeMerchant } from '../services/merchant.services.js';
@@ -13,6 +14,21 @@ export const createNonceController = async (req: Request, res: Response) => {
     }
     const result = await createNonce(address);
     res.status(201).json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+export const createChallengeController = async (req: Request, res: Response) => {
+  try {
+    const { address } = req.body ?? {};
+    if (!address || typeof address !== 'string' || !StrKey.isValidEd25519PublicKey(address)) {
+      res.status(400).json({ error: 'Invalid Stellar address' });
+      return;
+    }
+
+    const result = await createNonce(address);
+    res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
   }

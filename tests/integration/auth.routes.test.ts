@@ -16,6 +16,10 @@ jest.unstable_mockModule('@stellar/stellar-sdk', () => ({
       };
     },
   },
+  StrKey: {
+    isValidEd25519PublicKey: (address: string) =>
+      typeof address === 'string' && /^G[A-Z0-9]{55}$/.test(address),
+  },
 }));
 
 const { default: prismaMock } = await import('../../src/config/prisma.js') as any;
@@ -36,6 +40,72 @@ describe('Auth Routes', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  describe('POST /api/v1/auth/challenge', () => {
+    const validAddress = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+
+    test('should return 200 with message, nonce, and expiresAt for a valid Stellar address', async () => {
+      const generatedNonce = 'ab'.repeat(32);
+      const message = [
+        'Shade Authentication',
+        `Address: ${validAddress}`,
+        `Nonce: ${generatedNonce}`,
+        'Timestamp: 2026-06-21T12:00:00.000Z',
+      ].join('\n');
+      const expiresAt = new Date('2026-06-21T12:05:00.000Z');
+
+      prismaMock.authNonce.deleteMany.mockResolvedValue({ count: 0 });
+      prismaMock.authNonce.create.mockResolvedValue({
+        id: 'uuid-1',
+        address: validAddress,
+        nonce: generatedNonce,
+        message,
+        expiresAt,
+        usedAt: null,
+        createdAt: mockDate,
+        merchantId: null,
+      });
+
+      const response = await request(app)
+        .post('/api/v1/auth/challenge')
+        .send({ address: validAddress });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        message,
+        nonce: generatedNonce,
+        expiresAt: expiresAt.toISOString(),
+      });
+      expect(prismaMock.authNonce.deleteMany).toHaveBeenCalledWith({
+        where: { expiresAt: { lt: expect.any(Date) } },
+      });
+      expect(prismaMock.authNonce.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          address: validAddress,
+          nonce: expect.stringMatching(/^[0-9a-f]{64}$/),
+          message: expect.stringContaining('Shade Authentication'),
+          expiresAt: expect.any(Date),
+        }),
+      });
+    });
+
+    test('should return 400 for an invalid Stellar address', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/challenge')
+        .send({ address: 'not-a-stellar-address' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid Stellar address' });
+      expect(prismaMock.authNonce.create).not.toHaveBeenCalled();
+    });
+
+    test('should return 400 when address is missing', async () => {
+      const response = await request(app).post('/api/v1/auth/challenge').send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid Stellar address' });
+    });
   });
 
   describe('POST /api/v1/auth/verify', () => {

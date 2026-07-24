@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   createNonceController,
+  createChallengeController,
   verifySignatureController,
   verifyEmailController,
   resendOtpController,
@@ -9,6 +10,7 @@ import { authenticateMerchant } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 
+router.post('/challenge', createChallengeController);
 router.post('/nonce', createNonceController);
 router.post('/verify', verifySignatureController);
 router.post('/verify-email', authenticateMerchant, verifyEmailController);

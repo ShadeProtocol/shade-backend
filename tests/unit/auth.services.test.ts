@@ -15,6 +15,10 @@ jest.unstable_mockModule('@stellar/stellar-sdk', () => ({
       };
     },
   },
+  StrKey: {
+    isValidEd25519PublicKey: (address: string) =>
+      typeof address === 'string' && address.startsWith('G') && address.length >= 56,
+  },
 }));
 
 const { default: prismaMock } = await import('../../src/config/prisma.js') as any;
@@ -52,34 +56,44 @@ describe('Auth Services', () => {
   });
 
   describe('createNonce', () => {
-    test('should create an AuthNonce record and return nonce, message, and expiresAt', async () => {
+    test('should clean up expired nonces, create an AuthNonce, and return message, nonce, expiresAt', async () => {
       const mockNonce = {
         id: 'uuid-1',
         address: 'GABCDEF123',
-        nonce: 'generated-uuid',
-        message: 'Shade Authentication\nAddress: GABCDEF123\nNonce: generated-uuid\nTimestamp: 2026-06-21T12:00:00.000Z',
+        nonce: 'a'.repeat(64),
+        message:
+          'Shade Authentication\nAddress: GABCDEF123\nNonce: ' +
+          'a'.repeat(64) +
+          '\nTimestamp: 2026-06-21T12:00:00.000Z',
         expiresAt: new Date('2026-06-21T12:05:00.000Z'),
         usedAt: null,
         createdAt: mockDate,
       };
 
+      prismaMock.authNonce.deleteMany.mockResolvedValue({ count: 1 });
       prismaMock.authNonce.create.mockResolvedValue(mockNonce);
 
       const result = await createNonce('GABCDEF123');
 
+      expect(prismaMock.authNonce.deleteMany).toHaveBeenCalledWith({
+        where: { expiresAt: { lt: expect.any(Date) } },
+      });
       expect(result).toEqual({
-        nonce: mockNonce.nonce,
         message: mockNonce.message,
+        nonce: mockNonce.nonce,
         expiresAt: mockNonce.expiresAt,
       });
       expect(prismaMock.authNonce.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           address: 'GABCDEF123',
-          nonce: expect.any(String),
-          message: expect.any(String),
-          expiresAt: expect.any(Date),
+          nonce: expect.stringMatching(/^[0-9a-f]{64}$/),
+          message: expect.stringContaining('Shade Authentication'),
+          expiresAt: new Date('2026-06-21T12:05:00.000Z'),
         }),
       });
+      expect(prismaMock.authNonce.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
+        prismaMock.authNonce.create.mock.invocationCallOrder[0],
+      );
     });
   });
 
