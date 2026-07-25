@@ -1,6 +1,13 @@
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import { environment } from '../config/environment.js';
+import type { Invoice, Merchant } from '@prisma/client';
+import { generateInvoicePdf } from './invoice-pdf.services.js';
+
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+}
 
 const escapeHtml = (value: string): string =>
   value
@@ -24,13 +31,19 @@ const buildOtpEmailContent = (firstName: string, code: string) => {
   return { subject, html, text };
 };
 
-const sendViaResend = async (to: string, subject: string, html: string): Promise<void> => {
+const sendViaResend = async (
+  to: string,
+  subject: string,
+  html: string,
+  attachments?: EmailAttachment[],
+): Promise<void> => {
   const resend = new Resend(environment.email.resendApiKey);
   const { error } = await resend.emails.send({
     from: environment.email.from,
     to,
     subject,
     html,
+    attachments: attachments?.map(({ filename, content }) => ({ filename, content })),
   });
 
   if (error) {
@@ -43,6 +56,7 @@ const sendViaSmtp = async (
   subject: string,
   html: string,
   text: string,
+  attachments?: EmailAttachment[],
 ): Promise<void> => {
   const transporter = nodemailer.createTransport({
     host: environment.email.smtp.host,
@@ -60,6 +74,7 @@ const sendViaSmtp = async (
     subject,
     html,
     text,
+    attachments,
   });
 };
 
@@ -79,5 +94,53 @@ export const sendOtp = async (to: string, code: string, firstName: string): Prom
     case 'console':
     default:
       console.log(`[OTP] Verification code ${code} sent to ${to} for ${firstName}`);
+  }
+};
+
+const buildInvoiceEmailContent = (invoice: Invoice, merchant: Merchant) => {
+  const merchantName = escapeHtml(merchant.businessName || 'Your merchant');
+  const description = escapeHtml(invoice.description);
+  const subject = `Invoice from ${merchant.businessName || 'Shade'}: ${invoice.description}`;
+  const html = `
+    <p>Hi,</p>
+    <p>${merchantName} has sent you an invoice for <strong>${description}</strong>.</p>
+    <p>Amount: <strong>${invoice.amount.toString()} ${escapeHtml(invoice.token)}</strong></p>
+    <p>Status: <strong>${invoice.status}</strong></p>
+    <p>Your invoice is attached as a PDF.</p>
+  `.trim();
+  const text = `Hi,\n\n${merchant.businessName || 'Your merchant'} has sent you an invoice for ${invoice.description}.\n\nAmount: ${invoice.amount.toString()} ${invoice.token}\nStatus: ${invoice.status}\n\nYour invoice is attached as a PDF.`;
+
+  return { subject, html, text };
+};
+
+/**
+ * Emails the invoice to `invoice.email` with a freshly generated PDF attached.
+ * No-ops (does not throw) when the invoice has no email on file — callers
+ * that need to surface that as a user-facing error (e.g. the /send route)
+ * should check `invoice.email` before calling this.
+ */
+export const sendInvoiceEmail = async (invoice: Invoice, merchant: Merchant): Promise<void> => {
+  if (!invoice.email) {
+    return;
+  }
+
+  const pdf = await generateInvoicePdf(invoice, merchant);
+  const { subject, html, text } = buildInvoiceEmailContent(invoice, merchant);
+  const attachments: EmailAttachment[] = [
+    { filename: `invoice-${invoice.paymentSlug}.pdf`, content: pdf },
+  ];
+
+  switch (environment.email.provider) {
+    case 'resend':
+      await sendViaResend(invoice.email, subject, html, attachments);
+      return;
+    case 'smtp':
+      await sendViaSmtp(invoice.email, subject, html, text, attachments);
+      return;
+    case 'console':
+    default:
+      console.log(
+        `[Invoice email] Invoice ${invoice.paymentSlug} (${pdf.length} byte PDF) sent to ${invoice.email}`,
+      );
   }
 };

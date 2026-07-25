@@ -2,11 +2,14 @@ import { Request, Response } from 'express';
 import {
   createInvoice,
   getInvoice,
+  getInvoiceWithMerchant,
   listInvoices,
   voidInvoice,
 } from '../services/invoice.services.js';
 import { parseInvoiceListQuery, validateCreateInvoice } from '../utils/invoice.validation.js';
 import { AppError } from '../utils/errors.js';
+import { generateInvoicePdf } from '../services/invoice-pdf.services.js';
+import { sendInvoiceEmail } from '../services/email.service.js';
 
 export const createInvoiceController = async (req: Request, res: Response): Promise<void> => {
   const merchant = req.merchant;
@@ -85,6 +88,58 @@ export const voidInvoiceController = async (req: Request, res: Response): Promis
   try {
     const invoice = await voidInvoice(merchant.id, req.params.id);
     res.status(200).json(invoice);
+  } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+export const getInvoicePdfController = async (req: Request, res: Response): Promise<void> => {
+  const merchant = req.merchant;
+  if (!merchant) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  try {
+    const invoice = await getInvoiceWithMerchant(merchant.id, req.params.id);
+    const pdf = await generateInvoicePdf(invoice, invoice.merchant);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="invoice-${invoice.paymentSlug}.pdf"`,
+    );
+    res.status(200).send(pdf);
+  } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+export const sendInvoiceController = async (req: Request, res: Response): Promise<void> => {
+  const merchant = req.merchant;
+  if (!merchant) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  try {
+    const invoice = await getInvoiceWithMerchant(merchant.id, req.params.id);
+
+    if (!invoice.email) {
+      res.status(400).json({ error: 'Invoice has no email on file' });
+      return;
+    }
+
+    await sendInvoiceEmail(invoice, invoice.merchant);
+    res.status(200).json({ message: 'Invoice email sent' });
   } catch (error) {
     if (error instanceof AppError) {
       res.status(error.statusCode).json({ error: error.message });
