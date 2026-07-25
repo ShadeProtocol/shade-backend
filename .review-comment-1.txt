@@ -1,0 +1,6 @@
+This is a placeholder file to trigger review comments via the GitHub API.
+
+Critical issues identified in PR #34:
+1. Route ordering bug in invoice.routes.ts
+2. Overly broad error handling in invoice-pdf.services.ts
+3. Incomplete abstraction of visibility logic in pay.services.ts
