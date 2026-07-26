@@ -134,6 +134,24 @@ export const getInvoice = async (merchantId: string, id: string) => {
   return sanitizeInvoice(invoice);
 };
 
+/**
+ * Fetches the raw invoice + merchant records, scoped to the owning merchant,
+ * for the PDF/email flows that need fields beyond the sanitized public view
+ * (payer address, fiat breakdown, merchant logo).
+ */
+export const getInvoiceWithMerchant = async (merchantId: string, id: string) => {
+  const invoice = await prisma.invoice.findFirst({
+    where: { id, merchantId },
+    include: { merchant: true },
+  });
+
+  if (!invoice) {
+    throw new AppError(404, 'Invoice not found');
+  }
+
+  return invoice;
+};
+
 export const voidInvoice = async (merchantId: string, id: string) => {
   const invoice = await prisma.invoice.findFirst({
     where: { id, merchantId },

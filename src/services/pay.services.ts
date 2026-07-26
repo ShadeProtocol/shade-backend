@@ -10,6 +10,20 @@ const InvoiceStatus = {
   REFUNDED: 'REFUNDED',
 } as const satisfies Record<string, PrismaInvoiceStatus>;
 
+const assertInvoiceVisible = (invoice: { status: PrismaInvoiceStatus; expiresAt: Date | null }) => {
+  if (
+    invoice.status === InvoiceStatus.CANCELLED ||
+    invoice.status === InvoiceStatus.PAID ||
+    invoice.status === InvoiceStatus.REFUNDED
+  ) {
+    throw new AppError(410, 'Invoice is no longer available');
+  }
+
+  if (invoice.expiresAt && invoice.expiresAt < new Date()) {
+    throw new AppError(410, 'expired');
+  }
+};
+
 export const resolveInvoiceBySlug = async (slug: string) => {
   const invoice = await prisma.invoice.findUnique({
     where: { paymentSlug: slug },
@@ -33,17 +47,7 @@ export const resolveInvoiceBySlug = async (slug: string) => {
     throw new AppError(404, 'Invoice not found');
   }
 
-  if (
-    invoice.status === InvoiceStatus.CANCELLED ||
-    invoice.status === InvoiceStatus.PAID ||
-    invoice.status === InvoiceStatus.REFUNDED
-  ) {
-    throw new AppError(410, 'Invoice is no longer available');
-  }
-
-  if (invoice.expiresAt && invoice.expiresAt < new Date()) {
-    throw new AppError(410, 'expired');
-  }
+  assertInvoiceVisible(invoice);
 
   return {
     slug: invoice.paymentSlug,
@@ -57,6 +61,27 @@ export const resolveInvoiceBySlug = async (slug: string) => {
   };
 };
 
+/**
+ * Fetches the full invoice + merchant records for a publicly visible invoice,
+ * applying the same 404/410 visibility rules as `resolveInvoiceBySlug`. Used
+ * by the public PDF download route, which needs raw fields (payer, dates,
+ * fiat breakdown, logo) rather than the trimmed public-facing view.
+ */
+export const getInvoiceForPdfBySlug = async (slug: string) => {
+  const invoice = await prisma.invoice.findUnique({
+    where: { paymentSlug: slug },
+    include: { merchant: true },
+  });
+
+  if (!invoice) {
+    throw new AppError(404, 'Invoice not found');
+  }
+
+  assertInvoiceVisible(invoice);
+
+  return invoice;
+};
+
 export const confirmPayment = async (slug: string, payerAddress: string, txHash?: string) => {
   return await prisma.$transaction(async tx => {
     const invoice = await tx.invoice.findUnique({
@@ -67,17 +92,7 @@ export const confirmPayment = async (slug: string, payerAddress: string, txHash?
       throw new AppError(404, 'Invoice not found');
     }
 
-    if (
-      invoice.status === InvoiceStatus.CANCELLED ||
-      invoice.status === InvoiceStatus.PAID ||
-      invoice.status === InvoiceStatus.REFUNDED
-    ) {
-      throw new AppError(410, 'Invoice is no longer available');
-    }
-
-    if (invoice.expiresAt && invoice.expiresAt < new Date()) {
-      throw new AppError(410, 'expired');
-    }
+    assertInvoiceVisible(invoice);
 
     const idempotencyKey = `${invoice.id}-${payerAddress}-${txHash || 'none'}`;
 

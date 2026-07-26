@@ -1,12 +1,42 @@
 import { Request, Response } from 'express';
-import { resolveInvoiceBySlug, confirmPayment } from '../services/pay.services.js';
+import {
+  resolveInvoiceBySlug,
+  confirmPayment,
+  getInvoiceForPdfBySlug,
+} from '../services/pay.services.js';
 import { AppError } from '../utils/errors.js';
+import { generateInvoicePdf } from '../services/invoice-pdf.services.js';
 
 export const resolveInvoiceController = async (req: Request, res: Response): Promise<void> => {
   try {
     const { slug } = req.params;
     const invoice = await resolveInvoiceBySlug(slug);
     res.status(200).json(invoice);
+  } catch (error) {
+    if (error instanceof AppError) {
+      if (error.statusCode === 410 && error.message === 'expired') {
+        res.status(410).json({ reason: 'expired' });
+        return;
+      }
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+export const getInvoicePdfController = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { slug } = req.params;
+    const invoice = await getInvoiceForPdfBySlug(slug);
+    const pdf = await generateInvoicePdf(invoice, invoice.merchant);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="invoice-${invoice.paymentSlug}.pdf"`,
+    );
+    res.status(200).send(pdf);
   } catch (error) {
     if (error instanceof AppError) {
       if (error.statusCode === 410 && error.message === 'expired') {
