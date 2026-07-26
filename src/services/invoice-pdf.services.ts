@@ -72,8 +72,10 @@ export const generateInvoicePdf = (invoice: Invoice, merchant: Merchant): Promis
       try {
         doc.image(logoBuffer, { fit: [80, 80] });
         doc.moveDown();
-      } catch {
-        // Corrupt/undecodable image data — skip it rather than fail the render.
+      } catch (err) {
+        // Corrupt/undecodable image data — skip it rather than fail the render,
+        // but log so real failures (not just bad merchant uploads) stay visible.
+        console.error(`Failed to embed invoice logo for merchant ${merchant.id}`, err);
       }
     }
 
