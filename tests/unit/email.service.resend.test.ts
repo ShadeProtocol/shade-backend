@@ -3,6 +3,9 @@ import { jest } from '@jest/globals';
 // Exercise the real 'resend' provider branch. Only the third-party Resend SDK
 // is mocked (no live network call in a test run) — sendInvoiceEmail,
 // generateInvoicePdf, and all attachment-building logic run for real.
+// Save/restore EMAIL_PROVIDER since sibling test modules in this worker rely
+// on it being unset (console provider) or set to 'smtp'.
+const previousEmailProvider = process.env.EMAIL_PROVIDER;
 process.env.EMAIL_PROVIDER = 'resend';
 process.env.RESEND_API_KEY = 'test-resend-key';
 process.env.EMAIL_FROM = 'noreply@shade.test';
@@ -17,6 +20,12 @@ jest.unstable_mockModule('resend', () => ({
 }));
 
 const { sendInvoiceEmail } = await import('../../src/services/email.service.js');
+
+if (previousEmailProvider === undefined) {
+  delete process.env.EMAIL_PROVIDER;
+} else {
+  process.env.EMAIL_PROVIDER = previousEmailProvider;
+}
 
 const baseMerchant = {
   id: 'merchant-1',

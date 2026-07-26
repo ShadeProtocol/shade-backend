@@ -140,7 +140,7 @@ export const sendInvoiceEmail = async (invoice: Invoice, merchant: Merchant): Pr
     case 'console':
     default:
       console.log(
-        `[Invoice email] Invoice ${invoice.paymentSlug} (${pdf.length} byte PDF) sent to ${invoice.email}`,
+        `[Invoice email] Invoice ${invoice.paymentSlug} (${pdf.length} byte PDF) sent`,
       );
   }
 };

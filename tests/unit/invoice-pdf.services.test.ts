@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { generateInvoicePdf } from '../../src/services/invoice-pdf.services.js';
 
 const baseMerchant = {
@@ -117,6 +118,19 @@ describe('generateInvoicePdf', () => {
     const pdf = await generateInvoicePdf(baseInvoice, merchant);
 
     expect(isValidPdf(pdf)).toBe(true);
+  });
+
+  test('logs and continues when the logo data URI has valid base64 that is not a valid image', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const merchant = { ...baseMerchant, logo: 'data:image/png;base64,YWJjZGVm' };
+
+    const pdf = await generateInvoicePdf(baseInvoice, merchant);
+
+    expect(isValidPdf(pdf)).toBe(true);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0][0]).toContain('Failed to embed invoice logo');
+
+    errorSpy.mockRestore();
   });
 
   test('handles a merchant with no businessName and no logo', async () => {

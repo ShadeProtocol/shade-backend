@@ -1,9 +1,20 @@
 import { jest } from '@jest/globals';
 
-// EMAIL_PROVIDER is unset here, so environment.email.provider resolves to the
-// default 'console' branch. This exercises sendInvoiceEmail's real logic
+// EMAIL_PROVIDER must be unset here, so environment.email.provider resolves to
+// the default 'console' branch. This exercises sendInvoiceEmail's real logic
 // (the no-op guard and the real generateInvoicePdf call) with nothing mocked.
+// Explicitly clear it (and restore afterward) since a sibling test module in
+// this worker may have set it for the 'resend'/'smtp' provider branches.
+const previousEmailProvider = process.env.EMAIL_PROVIDER;
+delete process.env.EMAIL_PROVIDER;
+
 const { sendInvoiceEmail } = await import('../../src/services/email.service.js');
+
+if (previousEmailProvider === undefined) {
+  delete process.env.EMAIL_PROVIDER;
+} else {
+  process.env.EMAIL_PROVIDER = previousEmailProvider;
+}
 
 const baseMerchant = {
   id: 'merchant-1',
@@ -76,7 +87,7 @@ describe('sendInvoiceEmail (console provider — default when EMAIL_PROVIDER uns
 
     expect(logSpy).toHaveBeenCalledTimes(1);
     const [message] = logSpy.mock.calls[0] as [string];
-    expect(message).toContain('payer@example.com');
+    expect(message).not.toContain('payer@example.com');
     expect(message).toContain(baseInvoice.paymentSlug);
   });
 
