@@ -244,3 +244,17 @@ model PaymentConfirmation {
   idempotencyKey String   @unique
   createdAt      DateTime @default(now())
 }
+
+model IndexerCursor {
+  id         String   @id @default(uuid())
+  contractId String   @unique
+  lastLedger Int
+  updatedAt  DateTime @updatedAt
+}
+
+model IndexerEvent {
+  id          String   @id
+  topic       String
+  ledger      Int
+  processedAt DateTime @default(now())
+}
