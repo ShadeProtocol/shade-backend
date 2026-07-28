@@ -103,7 +103,7 @@ export async function tick(): Promise<void> {
         ? events[events.length - 1].ledger + 1
         : latestLedger + 1;
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       for (const item of processedIds) {
         await tx.indexerEvent.create({
           data: {
@@ -141,7 +141,7 @@ export async function startPolling(intervalMs = 6000): Promise<void> {
   while (isRunning) {
     await tick();
     if (!isRunning) break;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
   }
 }
 

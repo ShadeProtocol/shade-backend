@@ -10,7 +10,7 @@ process.on('SIGTERM', () => {
   stopPolling();
 });
 
-startPolling().catch((error) => {
+startPolling().catch(error => {
   console.error('Fatal error starting Soroban indexer:', error);
   process.exit(1);
 });

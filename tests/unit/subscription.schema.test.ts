@@ -172,19 +172,19 @@ describe('Subscription schema', () => {
       expect(result.status).toBe(SubscriptionStatus.CANCELLED);
     });
 
-    test.each([
-      [SubscriptionStatus.ACTIVE],
-      [SubscriptionStatus.CANCELLED],
-    ])('accepts status %s', async (status) => {
-      prismaMock.subscription.update.mockResolvedValue({ ...baseSubscription, status });
+    test.each([[SubscriptionStatus.ACTIVE], [SubscriptionStatus.CANCELLED]])(
+      'accepts status %s',
+      async status => {
+        prismaMock.subscription.update.mockResolvedValue({ ...baseSubscription, status });
 
-      const result = await prismaMock.subscription.update({
-        where: { id: 'sub-uuid' },
-        data: { status },
-      });
+        const result = await prismaMock.subscription.update({
+          where: { id: 'sub-uuid' },
+          data: { status },
+        });
 
-      expect(result.status).toBe(status);
-    });
+        expect(result.status).toBe(status);
+      },
+    );
   });
 
   describe('unique constraints', () => {

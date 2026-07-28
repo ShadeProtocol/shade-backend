@@ -15,7 +15,7 @@ jest.unstable_mockModule('../../src/indexer/sorobanClient.js', () => {
 
 const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
 const { sorobanServer } = (await import('../../src/indexer/sorobanClient.js')) as any;
-const { tick, startPolling, stopPolling, getCursor, setCursor, resetPoller } = await import(
+const { tick, startPolling, stopPolling, getCursor, resetPoller } = await import(
   '../../src/indexer/poller.js'
 );
 const { registerEventHandler, clearHandlers, dispatch } = await import(
@@ -40,8 +40,12 @@ describe('Core Soroban Indexer Infrastructure', () => {
 
   it('fails fast if STELLAR_CONTRACT_ID is unset', async () => {
     environment.stellar.contractId = '';
-    await expect(tick()).rejects.toThrow('STELLAR_CONTRACT_ID environment variable is unset or empty');
-    await expect(startPolling()).rejects.toThrow('STELLAR_CONTRACT_ID environment variable is unset or empty');
+    await expect(tick()).rejects.toThrow(
+      'STELLAR_CONTRACT_ID environment variable is unset or empty',
+    );
+    await expect(startPolling()).rejects.toThrow(
+      'STELLAR_CONTRACT_ID environment variable is unset or empty',
+    );
   });
 
   it('connects to RPC, fetches latest ledger, and logs decoded event without erroring', async () => {
@@ -72,7 +76,10 @@ describe('Core Soroban Indexer Infrastructure', () => {
   });
 
   it('persists cursor after processed batch and resumes correctly', async () => {
-    prismaMock.indexerCursor.findUnique.mockResolvedValue({ contractId: 'C_TEST_CONTRACT_ID', lastLedger: 50 });
+    prismaMock.indexerCursor.findUnique.mockResolvedValue({
+      contractId: 'C_TEST_CONTRACT_ID',
+      lastLedger: 50,
+    });
     sorobanServer.getLatestLedger.mockResolvedValue({ sequence: 55 });
     sorobanServer.getEvents.mockResolvedValue({ events: [] });
 
@@ -104,8 +111,15 @@ describe('Core Soroban Indexer Infrastructure', () => {
         },
       ],
     });
-    prismaMock.indexerCursor.findUnique.mockResolvedValue({ contractId: 'C_TEST_CONTRACT_ID', lastLedger: 10 });
-    prismaMock.indexerEvent.findUnique.mockResolvedValue({ id: 'evt-duplicate', topic: '', ledger: 10 });
+    prismaMock.indexerCursor.findUnique.mockResolvedValue({
+      contractId: 'C_TEST_CONTRACT_ID',
+      lastLedger: 10,
+    });
+    prismaMock.indexerEvent.findUnique.mockResolvedValue({
+      id: 'evt-duplicate',
+      topic: '',
+      ledger: 10,
+    });
 
     const handler = jest.fn();
     registerEventHandler('', handler);
@@ -124,7 +138,7 @@ describe('Core Soroban Indexer Infrastructure', () => {
         ledger: 1,
         txHash: 'hash',
         data: { foo: 'bar' },
-      })
+      }),
     ).resolves.not.toThrow();
   });
 
@@ -148,12 +162,18 @@ describe('Core Soroban Indexer Infrastructure', () => {
         },
       ],
     });
-    prismaMock.indexerCursor.findUnique.mockResolvedValue({ contractId: 'C_TEST_CONTRACT_ID', lastLedger: 20 });
+    prismaMock.indexerCursor.findUnique.mockResolvedValue({
+      contractId: 'C_TEST_CONTRACT_ID',
+      lastLedger: 20,
+    });
     prismaMock.indexerEvent.findUnique.mockResolvedValue(null);
 
-    const handler = jest.fn().mockImplementationOnce(() => {
-      throw new Error('Handler failed on bad event');
-    }).mockImplementationOnce(() => {});
+    const handler = jest
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('Handler failed on bad event');
+      })
+      .mockImplementationOnce(() => {});
     registerEventHandler('', handler);
 
     await tick();

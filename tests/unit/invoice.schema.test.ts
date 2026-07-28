@@ -159,7 +159,7 @@ describe('Invoice schema', () => {
       [InvoiceStatus.PARTIALLY_REFUNDED],
       [InvoiceStatus.PARTIALLY_PAID],
       [InvoiceStatus.DRAFT],
-    ])('accepts status %s', async (status) => {
+    ])('accepts status %s', async status => {
       prismaMock.invoice.update.mockResolvedValue({ ...baseInvoice, status });
 
       const result = await prismaMock.invoice.update({
