@@ -256,6 +256,6 @@ model DepositAccount {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  invoice         Invoice?  @relation(fields: [invoiceId], references: [id])
+  invoice         Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
 }
 
