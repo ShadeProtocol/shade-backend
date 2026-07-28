@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  amendInvoiceController,
   createInvoiceController,
   getInvoiceController,
   getInvoicePdfController,
@@ -18,6 +19,7 @@ router.get('/', listInvoicesController);
 router.get('/:id', getInvoiceController);
 router.get('/:id/pdf', getInvoicePdfController);
 router.post('/:id/send', sendInvoiceController);
+router.patch('/:id/amend', amendInvoiceController);
 router.patch('/:id/void', voidInvoiceController);
 
 export default router;
