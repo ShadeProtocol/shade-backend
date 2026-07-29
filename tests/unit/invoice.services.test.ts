@@ -1,7 +1,8 @@
+import { jest } from '@jest/globals';
 import { mockReset } from 'jest-mock-extended';
 
 const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
-const { createInvoice, listInvoices, getInvoice, voidInvoice, amendInvoice } = await import(
+const { createInvoice, listInvoices, getInvoice, voidInvoice, amendInvoice, applyInvoicePayment } = await import(
   '../../src/services/invoice.services.js'
 );
 
@@ -13,6 +14,7 @@ const baseInvoice = {
   paymentSlug: 'slug-1',
   description: 'Website design',
   amount: 5000n,
+  amountPaid: 0n,
   token: 'USDC',
   merchantId: MERCHANT_ID,
   status: 'PENDING',
@@ -29,6 +31,7 @@ const baseInvoice = {
 describe('invoice services', () => {
   beforeEach(() => {
     mockReset(prismaMock);
+    prismaMock.$transaction.mockImplementation(async (callback: any) => callback(prismaMock));
   });
 
   describe('createInvoice', () => {
@@ -206,6 +209,109 @@ describe('invoice services', () => {
       await expect(voidInvoice(MERCHANT_ID, 'invoice-1')).rejects.toMatchObject({
         statusCode: 404,
       });
+    });
+  });
+
+  describe('applyInvoicePayment', () => {
+    const paymentEvent = {
+      invoiceId: 101,
+      merchantId: 7,
+      payer: 'GPAyerAddress',
+      amount: 2000n,
+      fee: 20n,
+      merchantAmount: 1980n,
+      token: 'USDC',
+      timestamp: 1_700_000_000,
+    };
+
+    const merchant = { id: MERCHANT_ID, merchantId: paymentEvent.merchantId };
+
+    test('marks a partially paid invoice, records the amount, and creates its transaction', async () => {
+      prismaMock.invoice.findUnique.mockResolvedValue({
+        ...baseInvoice,
+        invoiceId: paymentEvent.invoiceId,
+      } as any);
+      prismaMock.invoice.findUniqueOrThrow.mockResolvedValue({
+        ...baseInvoice,
+        invoiceId: paymentEvent.invoiceId,
+      } as any);
+      prismaMock.merchant.findUnique.mockResolvedValue(merchant as any);
+      prismaMock.invoice.update.mockImplementation(async (args: any) => ({
+        ...baseInvoice,
+        ...args.data,
+      }));
+      prismaMock.transaction.create.mockResolvedValue({ id: 'transaction-1' } as any);
+
+      await applyInvoicePayment(paymentEvent, 'tx-partial');
+
+      expect(prismaMock.invoice.findUnique).toHaveBeenCalledWith({
+        where: { invoiceId: paymentEvent.invoiceId },
+      });
+      expect(prismaMock.merchant.findUnique).toHaveBeenCalledWith({
+        where: { merchantId: paymentEvent.merchantId },
+      });
+      expect(prismaMock.invoice.update).toHaveBeenCalledWith({
+        where: { id: baseInvoice.id },
+        data: {
+          status: 'PARTIALLY_PAID',
+          payer: paymentEvent.payer,
+          amountPaid: 2000n,
+          datePaid: null,
+        },
+      });
+      expect(prismaMock.transaction.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          transactionType: 'INVOICE_PAYMENT',
+          refId: paymentEvent.invoiceId,
+          amount: paymentEvent.amount,
+          token: paymentEvent.token,
+          merchantId: MERCHANT_ID,
+          date: new Date(paymentEvent.timestamp * 1000),
+        }),
+      });
+    });
+
+    test('marks the invoice PAID and sets datePaid when the payment completes it', async () => {
+      prismaMock.invoice.findUnique.mockResolvedValue({
+        ...baseInvoice,
+        invoiceId: paymentEvent.invoiceId,
+      } as any);
+      prismaMock.invoice.findUniqueOrThrow.mockResolvedValue({
+        ...baseInvoice,
+        id: 'transaction-invoice-id',
+        invoiceId: paymentEvent.invoiceId,
+        amountPaid: 3500n,
+      } as any);
+      prismaMock.merchant.findUnique.mockResolvedValue(merchant as any);
+      prismaMock.invoice.update.mockResolvedValue({ ...baseInvoice, status: 'PAID' } as any);
+      prismaMock.transaction.create.mockResolvedValue({ id: 'transaction-1' } as any);
+
+      await applyInvoicePayment(paymentEvent, 'tx-complete');
+
+      expect(prismaMock.invoice.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { invoiceId: paymentEvent.invoiceId },
+      });
+      expect(prismaMock.invoice.update).toHaveBeenCalledWith({
+        where: { id: 'transaction-invoice-id' },
+        data: {
+          status: 'PAID',
+          payer: paymentEvent.payer,
+          amountPaid: 5500n,
+          datePaid: new Date(paymentEvent.timestamp * 1000),
+        },
+      });
+    });
+
+    test('logs and skips an on-chain payment whose invoice is not in the database', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      prismaMock.invoice.findUnique.mockResolvedValue(null);
+
+      await expect(applyInvoicePayment(paymentEvent, 'tx-missing')).resolves.toBeNull();
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('invoice is not in the database'));
+      expect(prismaMock.merchant.findUnique).not.toHaveBeenCalled();
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      warn.mockRestore();
     });
   });
 });

@@ -8,6 +8,7 @@ import {
   InvoicePagination,
   parseAmount,
 } from '../utils/invoice.validation.js';
+import type { InvoicePaidEventData } from '../indexer/types.js';
 
 const SLUG_MAX_RETRIES = 5;
 const INVOICE_DESCRIPTION_MAX_LENGTH = 100;
@@ -19,8 +20,13 @@ const InvoiceStatus = {
   DRAFT: 'DRAFT',
   PENDING: 'PENDING',
   PAID: 'PAID',
+  PARTIALLY_PAID: 'PARTIALLY_PAID',
   CANCELLED: 'CANCELLED',
 } as const satisfies Record<string, PrismaInvoiceStatus>;
+
+const TransactionType = {
+  INVOICE_PAYMENT: 'INVOICE_PAYMENT',
+} as const;
 
 /**
  * Public-facing view of an invoice. `amount` is serialized to a string because
@@ -230,4 +236,79 @@ export const voidInvoice = async (merchantId: string, id: string) => {
   });
 
   return sanitizeInvoice(updated);
+};
+
+/**
+ * Applies a confirmed on-chain invoice payment to the backend projection.
+ *
+ * The indexer's IndexerEvent table is the only replay guard. Do not add an
+ * event-level guard here: this service deliberately owns state mutation only.
+ * Deposit-account payment detection is intentionally out of scope; it will be
+ * handled by a dedicated indexer handler in a follow-up issue.
+ */
+export const applyInvoicePayment = async (event: InvoicePaidEventData, txHash: string) => {
+  const invoice = await prisma.invoice.findUnique({
+    where: { invoiceId: event.invoiceId },
+  });
+
+  if (!invoice) {
+    console.warn(
+      `InvoicePaid event for invoice ${event.invoiceId} (${txHash}) skipped: invoice is not in the database.`,
+    );
+    return null;
+  }
+
+  const merchant = await prisma.merchant.findUnique({
+    where: { merchantId: event.merchantId },
+  });
+
+  if (!merchant) {
+    console.warn(
+      `InvoicePaid event for invoice ${event.invoiceId} (${txHash}) skipped: merchant ${event.merchantId} is not in the database.`,
+    );
+    return null;
+  }
+
+  if (invoice.merchantId !== merchant.id) {
+    console.warn(
+      `InvoicePaid event for invoice ${event.invoiceId} (${txHash}) skipped: invoice and event merchants do not match.`,
+    );
+    return null;
+  }
+
+  const paidAt = new Date(event.timestamp * 1000);
+  const description = `Invoice #${event.invoiceId} payment${txHash ? ` (${txHash})` : ''}`;
+
+  return prisma.$transaction(async (tx: any) => {
+    const transactionInvoice = await tx.invoice.findUniqueOrThrow({
+      where: { invoiceId: event.invoiceId },
+    });
+    const amountPaid = transactionInvoice.amountPaid + event.amount;
+    const status: PrismaInvoiceStatus =
+      amountPaid >= transactionInvoice.amount ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID;
+
+    const updatedInvoice = await tx.invoice.update({
+      where: { id: transactionInvoice.id },
+      data: {
+        status,
+        payer: event.payer,
+        amountPaid,
+        datePaid: status === InvoiceStatus.PAID ? paidAt : null,
+      },
+    });
+
+    const transaction = await tx.transaction.create({
+      data: {
+        transactionType: TransactionType.INVOICE_PAYMENT,
+        refId: event.invoiceId,
+        amount: event.amount,
+        token: event.token,
+        description,
+        merchantId: merchant.id,
+        date: paidAt,
+      },
+    });
+
+    return { invoice: updatedInvoice, transaction };
+  });
 };

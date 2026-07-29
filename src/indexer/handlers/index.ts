@@ -1,2 +1,4 @@
-// Handlers will be registered here as separate issues are implemented.
-export {};
+import { registerEventHandler } from '../registry.js';
+import { handleInvoicePaid, INVOICE_PAID_TOPIC } from './invoicePaid.js';
+
+registerEventHandler(INVOICE_PAID_TOPIC, handleInvoicePaid);
