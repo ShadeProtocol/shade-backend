@@ -17,7 +17,7 @@ jest.unstable_mockModule('@stellar/stellar-sdk', () => ({
   },
 }));
 
-const { default: prismaMock } = await import('../../src/config/prisma.js') as any;
+const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
 const { environment } = await import('../../src/config/environment.js');
 const {
   authenticateWallet,
@@ -57,7 +57,8 @@ describe('Auth Services', () => {
         id: 'uuid-1',
         address: 'GABCDEF123',
         nonce: 'generated-uuid',
-        message: 'Shade Authentication\nAddress: GABCDEF123\nNonce: generated-uuid\nTimestamp: 2026-06-21T12:00:00.000Z',
+        message:
+          'Shade Authentication\nAddress: GABCDEF123\nNonce: generated-uuid\nTimestamp: 2026-06-21T12:00:00.000Z',
         expiresAt: new Date('2026-06-21T12:05:00.000Z'),
         usedAt: null,
         createdAt: mockDate,

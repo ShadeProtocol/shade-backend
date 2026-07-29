@@ -10,7 +10,7 @@ import { generateInvoicePdf } from '../services/invoice-pdf.services.js';
 export const resolveInvoiceController = async (req: Request, res: Response): Promise<void> => {
   try {
     const { slug } = req.params;
-    const invoice = await resolveInvoiceBySlug(slug);
+    const invoice = await resolveInvoiceBySlug(slug as string);
     res.status(200).json(invoice);
   } catch (error) {
     if (error instanceof AppError) {
@@ -28,7 +28,7 @@ export const resolveInvoiceController = async (req: Request, res: Response): Pro
 export const getInvoicePdfController = async (req: Request, res: Response): Promise<void> => {
   try {
     const { slug } = req.params;
-    const invoice = await getInvoiceForPdfBySlug(slug);
+    const invoice = await getInvoiceForPdfBySlug(slug as string);
     const pdf = await generateInvoicePdf(invoice, invoice.merchant);
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -65,7 +65,7 @@ export const confirmPaymentController = async (req: Request, res: Response): Pro
       return;
     }
 
-    await confirmPayment(slug, payerAddress, txHash);
+    await confirmPayment(slug as string, payerAddress, txHash);
     res.status(202).json({ message: 'Payment confirmation received' });
   } catch (error) {
     if (error instanceof AppError) {

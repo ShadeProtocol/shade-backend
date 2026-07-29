@@ -1,4 +1,3 @@
-import { jest } from '@jest/globals';
 import { mockReset } from 'jest-mock-extended';
 import request from 'supertest';
 
@@ -74,7 +73,10 @@ describe('PATCH /api/v1/merchants/me', () => {
 
   test('updates a valid partial payload and returns 200', async () => {
     authenticateAs(baseMerchant);
-    prismaMock.merchant.update.mockImplementation(async (args: any) => ({ ...baseMerchant, ...args.data }));
+    prismaMock.merchant.update.mockImplementation(async (args: any) => ({
+      ...baseMerchant,
+      ...args.data,
+    }));
 
     const response = await request(app)
       .patch(ME_URL)
@@ -82,12 +84,18 @@ describe('PATCH /api/v1/merchants/me', () => {
       .send({ firstName: 'Grace', webhook: 'https://example.com/hook' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ firstName: 'Grace', webhook: 'https://example.com/hook' });
+    expect(response.body).toMatchObject({
+      firstName: 'Grace',
+      webhook: 'https://example.com/hook',
+    });
   });
 
   test('silently ignores non-editable fields (address/email/merchantId/account)', async () => {
     authenticateAs(baseMerchant);
-    prismaMock.merchant.update.mockImplementation(async (args: any) => ({ ...baseMerchant, ...args.data }));
+    prismaMock.merchant.update.mockImplementation(async (args: any) => ({
+      ...baseMerchant,
+      ...args.data,
+    }));
 
     const response = await request(app)
       .patch(ME_URL)
@@ -124,7 +132,10 @@ describe('PATCH /api/v1/merchants/me', () => {
 
   test('clears the webhook when sent null', async () => {
     authenticateAs(baseMerchant);
-    prismaMock.merchant.update.mockImplementation(async (args: any) => ({ ...baseMerchant, ...args.data }));
+    prismaMock.merchant.update.mockImplementation(async (args: any) => ({
+      ...baseMerchant,
+      ...args.data,
+    }));
 
     const response = await request(app)
       .patch(ME_URL)

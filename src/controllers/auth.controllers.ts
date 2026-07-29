@@ -13,7 +13,7 @@ export const createNonceController = async (req: Request, res: Response) => {
     }
     const result = await createNonce(address);
     res.status(201).json(result);
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
@@ -42,7 +42,7 @@ export const verifySignatureController = async (req: Request, res: Response) => 
       refreshToken: result.refreshToken,
       merchant: result.merchant,
     });
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };

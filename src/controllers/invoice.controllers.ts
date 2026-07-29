@@ -67,7 +67,7 @@ export const getInvoiceController = async (req: Request, res: Response): Promise
   }
 
   try {
-    const invoice = await getInvoice(merchant.id, req.params.id);
+    const invoice = await getInvoice(merchant.id, req.params.id as string);
     res.status(200).json(invoice);
   } catch (error) {
     if (error instanceof AppError) {
@@ -86,7 +86,7 @@ export const voidInvoiceController = async (req: Request, res: Response): Promis
   }
 
   try {
-    const invoice = await voidInvoice(merchant.id, req.params.id);
+    const invoice = await voidInvoice(merchant.id, req.params.id as string);
     res.status(200).json(invoice);
   } catch (error) {
     if (error instanceof AppError) {
@@ -105,7 +105,7 @@ export const getInvoicePdfController = async (req: Request, res: Response): Prom
   }
 
   try {
-    const invoice = await getInvoiceWithMerchant(merchant.id, req.params.id);
+    const invoice = await getInvoiceWithMerchant(merchant.id, req.params.id as string);
     const pdf = await generateInvoicePdf(invoice, invoice.merchant);
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -131,7 +131,7 @@ export const sendInvoiceController = async (req: Request, res: Response): Promis
   }
 
   try {
-    const invoice = await getInvoiceWithMerchant(merchant.id, req.params.id);
+    const invoice = await getInvoiceWithMerchant(merchant.id, req.params.id as string);
 
     if (!invoice.email) {
       res.status(400).json({ error: 'Invoice has no email on file' });

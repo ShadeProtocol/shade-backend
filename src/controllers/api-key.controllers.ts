@@ -54,7 +54,7 @@ export const revokeApiKeyController = async (req: Request, res: Response): Promi
   }
 
   try {
-    await revokeApiKey(merchant.id, req.params.id);
+    await revokeApiKey(merchant.id, req.params.id as string);
     res.status(200).json({ message: 'API key revoked' });
   } catch (error) {
     if (error instanceof AppError) {

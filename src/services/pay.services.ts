@@ -83,7 +83,7 @@ export const getInvoiceForPdfBySlug = async (slug: string) => {
 };
 
 export const confirmPayment = async (slug: string, payerAddress: string, txHash?: string) => {
-  return await prisma.$transaction(async tx => {
+  return await prisma.$transaction(async (tx: any) => {
     const invoice = await tx.invoice.findUnique({
       where: { paymentSlug: slug },
     });

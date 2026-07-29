@@ -44,7 +44,7 @@ export const createApiKey = async (
   const { rawKey, prefix, keyHash } = generateApiKeyMaterial();
   const normalizedLabel = label?.trim() || null;
 
-  const apiKey = await prisma.$transaction(async tx => {
+  const apiKey = await prisma.$transaction(async (tx: any) => {
     const activeKeys = await tx.apiKey.count({
       where: activeApiKeyWhere(merchantId),
     });

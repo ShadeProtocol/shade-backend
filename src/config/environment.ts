@@ -21,6 +21,12 @@ const parseEmailProvider = (value: string | undefined): EmailProvider => {
   return provider as EmailProvider;
 };
 
+const parseOptionalInt = (value: string | undefined): number | undefined => {
+  if (!value || value.trim() === '') return undefined;
+  const parsed = parseInt(value, 10);
+  return Number.isNaN(parsed) ? undefined : parsed;
+};
+
 export const environment = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
@@ -45,5 +51,10 @@ export const environment = {
       pass: process.env.SMTP_PASS || '',
       secure: process.env.SMTP_SECURE === 'true',
     },
+  },
+  stellar: {
+    rpcUrl: process.env.STELLAR_RPC_URL || 'https://soroban-testnet.stellar.org',
+    contractId: process.env.STELLAR_CONTRACT_ID || '',
+    indexerStartLedger: parseOptionalInt(process.env.STELLAR_INDEXER_START_LEDGER),
   },
 };
