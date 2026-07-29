@@ -39,6 +39,7 @@ describe('Auth Routes', () => {
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock),
     );
+    prismaMock.$executeRaw.mockResolvedValue(1);
   });
 
   afterEach(() => {

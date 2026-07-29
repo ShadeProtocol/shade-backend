@@ -47,6 +47,7 @@ describe('Auth Services', () => {
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock),
     );
+    prismaMock.$executeRaw.mockResolvedValue(1);
   });
 
   afterEach(() => {
@@ -79,10 +80,12 @@ describe('Auth Services', () => {
 
       prismaMock.authNonce.deleteMany.mockResolvedValue({ count: 1 });
       prismaMock.authNonce.create.mockResolvedValue(mockNonce);
+      prismaMock.$executeRaw.mockResolvedValue(1);
 
       const result = await createNonce('GABCDEF123');
 
       expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1);
       expect(prismaMock.authNonce.deleteMany).toHaveBeenCalledWith({
         where: {
           OR: [
@@ -109,25 +112,66 @@ describe('Auth Services', () => {
       );
     });
 
-    test('should serialize concurrent requests through a single transaction callback', async () => {
+    test('returns an existing active challenge when the unique constraint is violated', async () => {
+      const existing = {
+        id: 'uuid-existing',
+        address: 'GABCDEF123',
+        nonce: 'e'.repeat(64),
+        message: 'stored-existing-message',
+        expiresAt: new Date('2026-06-21T12:05:00.000Z'),
+        usedAt: null,
+        createdAt: mockDate,
+        merchantId: null,
+      };
+
+      prismaMock.$executeRaw.mockResolvedValue(1);
+      prismaMock.authNonce.deleteMany.mockResolvedValue({ count: 0 });
+      prismaMock.authNonce.create.mockRejectedValue({ code: 'P2002', meta: { target: ['address'] } });
+      prismaMock.authNonce.findFirst.mockResolvedValue(existing);
+
+      const result = await createNonce('GABCDEF123');
+
+      expect(result).toEqual({
+        message: existing.message,
+        nonce: existing.nonce,
+        expiresAt: existing.expiresAt,
+      });
+      expect(prismaMock.authNonce.findFirst).toHaveBeenCalledWith({
+        where: {
+          address: 'GABCDEF123',
+          usedAt: null,
+          expiresAt: { gt: mockDate },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    });
+
+    test('retries issuance when a unique constraint conflict has no readable active nonce', async () => {
       const mockNonce = {
         id: 'uuid-1',
         address: 'GABCDEF123',
-        nonce: 'b'.repeat(64),
-        message: 'stored-message',
+        nonce: 'f'.repeat(64),
+        message: 'retry-message',
         expiresAt: new Date('2026-06-21T12:05:00.000Z'),
         usedAt: null,
         createdAt: mockDate,
       };
 
-      prismaMock.authNonce.deleteMany.mockResolvedValue({ count: 1 });
-      prismaMock.authNonce.create.mockResolvedValue(mockNonce);
+      prismaMock.$executeRaw.mockResolvedValue(1);
+      prismaMock.authNonce.deleteMany.mockResolvedValue({ count: 0 });
+      prismaMock.authNonce.create
+        .mockRejectedValueOnce({ code: 'P2002', meta: { target: ['address'] } })
+        .mockResolvedValueOnce(mockNonce);
+      prismaMock.authNonce.findFirst.mockResolvedValueOnce(null);
 
-      await Promise.all([createNonce('GABCDEF123'), createNonce('GABCDEF123')]);
+      const result = await createNonce('GABCDEF123');
 
       expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
-      expect(prismaMock.authNonce.deleteMany).toHaveBeenCalledTimes(2);
-      expect(prismaMock.authNonce.create).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        message: mockNonce.message,
+        nonce: mockNonce.nonce,
+        expiresAt: mockNonce.expiresAt,
+      });
     });
   });
 

@@ -22,6 +22,7 @@ describe('Auth sign/verify E2E', () => {
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock),
     );
+    prismaMock.$executeRaw.mockResolvedValue(1);
   });
 
   afterEach(() => {

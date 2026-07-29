@@ -6,6 +6,55 @@ import { environment } from '../config/environment.js';
 
 const NONCE_EXPIRY_MS = 5 * 60 * 1000;
 const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_NONCE_CREATE_ATTEMPTS = 3;
+
+function formatChallengeResponse(authNonce: {
+  message: string;
+  nonce: string;
+  expiresAt: Date;
+}) {
+  return {
+    message: authNonce.message,
+    nonce: authNonce.nonce,
+    expiresAt: authNonce.expiresAt,
+  };
+}
+
+function isActiveNonceConflict(error: unknown): boolean {
+  return (error as { code?: string })?.code === 'P2002';
+}
+
+async function findActiveNonceForAddress(address: string, now: Date) {
+  return prisma.authNonce.findFirst({
+    where: {
+      address,
+      usedAt: null,
+      expiresAt: { gt: now },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+async function createNonceInTransaction(address: string, now: Date) {
+  const nonce = crypto.randomBytes(32).toString('hex');
+  const createdAt = now;
+  const expiresAt = new Date(createdAt.getTime() + NONCE_EXPIRY_MS);
+  const message = buildChallengeMessage(address, nonce, createdAt);
+
+  return prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${address}))`;
+
+    await tx.authNonce.deleteMany({
+      where: {
+        OR: [{ expiresAt: { lt: now } }, { address, usedAt: null }],
+      },
+    });
+
+    return tx.authNonce.create({
+      data: { address, nonce, message, expiresAt },
+    });
+  });
+}
 
 export function buildChallengeMessage(address: string, nonce: string, createdAt: Date): string {
   return [
@@ -18,28 +67,24 @@ export function buildChallengeMessage(address: string, nonce: string, createdAt:
 
 export async function createNonce(address: string) {
   const now = new Date();
-  const nonce = crypto.randomBytes(32).toString('hex');
-  const createdAt = now;
-  const expiresAt = new Date(createdAt.getTime() + NONCE_EXPIRY_MS);
-  const message = buildChallengeMessage(address, nonce, createdAt);
 
-  const authNonce = await prisma.$transaction(async tx => {
-    await tx.authNonce.deleteMany({
-      where: {
-        OR: [{ expiresAt: { lt: now } }, { address, usedAt: null }],
-      },
-    });
+  for (let attempt = 0; attempt < MAX_NONCE_CREATE_ATTEMPTS; attempt++) {
+    try {
+      const authNonce = await createNonceInTransaction(address, now);
+      return formatChallengeResponse(authNonce);
+    } catch (error) {
+      if (!isActiveNonceConflict(error)) {
+        throw error;
+      }
 
-    return tx.authNonce.create({
-      data: { address, nonce, message, expiresAt },
-    });
-  });
+      const existing = await findActiveNonceForAddress(address, now);
+      if (existing) {
+        return formatChallengeResponse(existing);
+      }
+    }
+  }
 
-  return {
-    message: authNonce.message,
-    nonce: authNonce.nonce,
-    expiresAt: authNonce.expiresAt,
-  };
+  throw new Error('Failed to create auth challenge after concurrent conflict');
 }
 
 export async function verifySignature(address: string, nonce: string, rawSignature: string) {
