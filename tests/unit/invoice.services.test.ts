@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 import { mockReset } from 'jest-mock-extended';
 
 const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
-const { createInvoice, listInvoices, getInvoice, voidInvoice, applyInvoicePayment } = await import(
+const { createInvoice, listInvoices, getInvoice, voidInvoice, amendInvoice, applyInvoicePayment } = await import(
   '../../src/services/invoice.services.js'
 );
 
@@ -121,6 +121,56 @@ describe('invoice services', () => {
       await expect(getInvoice(MERCHANT_ID, 'missing')).rejects.toMatchObject({
         statusCode: 404,
       });
+    });
+  });
+
+  describe('amendInvoice', () => {
+    test('updates only the provided fields on a PENDING invoice', async () => {
+      prismaMock.invoice.findFirst.mockResolvedValue(baseInvoice as any);
+      prismaMock.invoice.update.mockResolvedValue({
+        ...baseInvoice,
+        email: 'payer@example.com',
+        amount: 2000n,
+        description: 'Updated website design',
+      } as any);
+
+      const result = await amendInvoice(MERCHANT_ID, 'invoice-1', {
+        email: 'payer@example.com',
+        amount: '2000',
+        description: 'Updated website design',
+      });
+
+      expect(result.email).toBe('payer@example.com');
+      expect(result.amount).toBe('2000');
+      expect(result.description).toBe('Updated website design');
+      expect(prismaMock.invoice.update).toHaveBeenCalledWith({
+        where: { id: 'invoice-1' },
+        data: {
+          email: 'payer@example.com',
+          amount: 2000n,
+          description: 'Updated website design',
+        },
+      });
+    });
+
+    test('rejects a non-positive amount with a 400', async () => {
+      prismaMock.invoice.findFirst.mockResolvedValue(baseInvoice as any);
+
+      await expect(amendInvoice(MERCHANT_ID, 'invoice-1', { amount: '0' })).rejects.toMatchObject({
+        statusCode: 400,
+      });
+      expect(prismaMock.invoice.update).not.toHaveBeenCalled();
+    });
+
+    test('rejects descriptions over the 100-character limit', async () => {
+      prismaMock.invoice.findFirst.mockResolvedValue(baseInvoice as any);
+
+      await expect(
+        amendInvoice(MERCHANT_ID, 'invoice-1', {
+          description: 'x'.repeat(101),
+        }),
+      ).rejects.toMatchObject({ statusCode: 400 });
+      expect(prismaMock.invoice.update).not.toHaveBeenCalled();
     });
   });
 

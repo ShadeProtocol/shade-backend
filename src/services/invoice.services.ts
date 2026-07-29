@@ -11,6 +11,7 @@ import {
 import type { InvoicePaidEventData } from '../indexer/types.js';
 
 const SLUG_MAX_RETRIES = 5;
+const INVOICE_DESCRIPTION_MAX_LENGTH = 100;
 
 // String constants matching the Prisma `Status` enum. Defined locally so this
 // module never imports a runtime value from `@prisma/client` (the generated
@@ -31,6 +32,12 @@ const TransactionType = {
  * Public-facing view of an invoice. `amount` is serialized to a string because
  * `BigInt` is not JSON-serializable.
  */
+export interface AmendInvoiceInput {
+  email?: string | null;
+  amount?: string | number;
+  description?: string;
+}
+
 export const sanitizeInvoice = (invoice: Invoice) => ({
   id: invoice.id,
   paymentSlug: invoice.paymentSlug,
@@ -156,6 +163,58 @@ export const getInvoiceWithMerchant = async (merchantId: string, id: string) => 
   }
 
   return invoice;
+};
+
+export const amendInvoice = async (merchantId: string, id: string, data: AmendInvoiceInput) => {
+  const invoice = await prisma.invoice.findFirst({
+    where: { id, merchantId },
+  });
+
+  if (!invoice) {
+    throw new AppError(404, 'Invoice not found');
+  }
+
+  if (invoice.status !== InvoiceStatus.PENDING) {
+    throw new AppError(400, 'Only pending invoices can be amended');
+  }
+
+  const updateData: Prisma.InvoiceUpdateInput = {};
+
+  if (data.email !== undefined) {
+    updateData.email = data.email === null ? null : data.email.trim();
+  }
+
+  if (data.amount !== undefined) {
+    const amount = parseAmount(data.amount);
+    if (amount === null) {
+      throw new AppError(400, 'amount must be a positive integer');
+    }
+    updateData.amount = amount;
+  }
+
+  if (data.description !== undefined) {
+    const description =
+      typeof data.description === 'string' ? data.description.trim() : data.description;
+    if (typeof description !== 'string') {
+      throw new AppError(400, 'description must be a string');
+    }
+    if (description.length > INVOICE_DESCRIPTION_MAX_LENGTH) {
+      throw new AppError(400, 'description exceeds the maximum length of 100 characters');
+    }
+    updateData.description = description;
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    return sanitizeInvoice(invoice);
+  }
+
+  // This endpoint updates the DB record only. On-chain amend_invoice reconciliation is intentionally out of scope.
+  const updated = await prisma.invoice.update({
+    where: { id: invoice.id },
+    data: updateData,
+  });
+
+  return sanitizeInvoice(updated);
 };
 
 export const voidInvoice = async (merchantId: string, id: string) => {

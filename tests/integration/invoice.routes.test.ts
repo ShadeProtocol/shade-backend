@@ -185,6 +185,70 @@ describe('Invoice routes', () => {
     });
   });
 
+  describe('PATCH /api/v1/invoices/:id/amend', () => {
+    test('amends a PENDING invoice with the provided fields', async () => {
+      authenticate();
+      prismaMock.invoice.findFirst.mockResolvedValue(baseInvoice as any);
+      prismaMock.invoice.update.mockResolvedValue({
+        ...baseInvoice,
+        email: 'payer@example.com',
+        amount: 2000n,
+        description: 'Updated website design',
+      } as any);
+
+      const response = await request(app)
+        .patch('/api/v1/invoices/invoice-1/amend')
+        .set(auth)
+        .send({ email: 'payer@example.com', amount: '2000', description: 'Updated website design' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.email).toBe('payer@example.com');
+      expect(response.body.amount).toBe('2000');
+      expect(response.body.description).toBe('Updated website design');
+    });
+
+    test('returns 400 when amending a non-PENDING invoice', async () => {
+      authenticate();
+      prismaMock.invoice.findFirst.mockResolvedValue({
+        ...baseInvoice,
+        status: 'PAID',
+      } as any);
+
+      const response = await request(app)
+        .patch('/api/v1/invoices/invoice-1/amend')
+        .set(auth)
+        .send({ description: 'Updated' });
+
+      expect(response.status).toBe(400);
+      expect(prismaMock.invoice.update).not.toHaveBeenCalled();
+    });
+
+    test('returns 404 when the invoice is not owned by the merchant', async () => {
+      authenticate();
+      prismaMock.invoice.findFirst.mockResolvedValue(null);
+
+      const response = await request(app)
+        .patch('/api/v1/invoices/invoice-1/amend')
+        .set(auth)
+        .send({ description: 'Updated' });
+
+      expect(response.status).toBe(404);
+    });
+
+    test('returns 400 for an invalid amount', async () => {
+      authenticate();
+      prismaMock.invoice.findFirst.mockResolvedValue(baseInvoice as any);
+
+      const response = await request(app)
+        .patch('/api/v1/invoices/invoice-1/amend')
+        .set(auth)
+        .send({ amount: '0' });
+
+      expect(response.status).toBe(400);
+      expect(prismaMock.invoice.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('PATCH /api/v1/invoices/:id/void', () => {
     test('voids a PENDING invoice', async () => {
       authenticate();
