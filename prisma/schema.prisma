@@ -128,6 +128,7 @@ model Invoice {
 
   bridgePayments       BridgePayment[]
   paymentConfirmations PaymentConfirmation[]
+  depositAccount       DepositAccount?
 
   // Enables the composite FK on BridgePayment that enforces invoiceId+merchantId consistency.
   @@unique([id, merchantId])
@@ -244,3 +245,17 @@ model PaymentConfirmation {
   idempotencyKey String   @unique
   createdAt      DateTime @default(now())
 }
+
+model DepositAccount {
+  id              String    @id @default(uuid())
+  address         String    @unique
+  encryptedSecret String
+  invoiceId       String?   @unique
+  inUse           Boolean   @default(false)
+  lastUsedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  invoice         Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+}
+
