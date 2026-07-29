@@ -181,6 +181,10 @@ describe('invoice services', () => {
         ...baseInvoice,
         invoiceId: paymentEvent.invoiceId,
       } as any);
+      prismaMock.invoice.findUniqueOrThrow.mockResolvedValue({
+        ...baseInvoice,
+        invoiceId: paymentEvent.invoiceId,
+      } as any);
       prismaMock.merchant.findUnique.mockResolvedValue(merchant as any);
       prismaMock.invoice.update.mockImplementation(async (args: any) => ({
         ...baseInvoice,
@@ -221,6 +225,11 @@ describe('invoice services', () => {
       prismaMock.invoice.findUnique.mockResolvedValue({
         ...baseInvoice,
         invoiceId: paymentEvent.invoiceId,
+      } as any);
+      prismaMock.invoice.findUniqueOrThrow.mockResolvedValue({
+        ...baseInvoice,
+        id: 'transaction-invoice-id',
+        invoiceId: paymentEvent.invoiceId,
         amountPaid: 3500n,
       } as any);
       prismaMock.merchant.findUnique.mockResolvedValue(merchant as any);
@@ -229,8 +238,11 @@ describe('invoice services', () => {
 
       await applyInvoicePayment(paymentEvent, 'tx-complete');
 
+      expect(prismaMock.invoice.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { invoiceId: paymentEvent.invoiceId },
+      });
       expect(prismaMock.invoice.update).toHaveBeenCalledWith({
-        where: { id: baseInvoice.id },
+        where: { id: 'transaction-invoice-id' },
         data: {
           status: 'PAID',
           payer: paymentEvent.payer,

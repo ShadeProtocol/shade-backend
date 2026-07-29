@@ -217,15 +217,19 @@ export const applyInvoicePayment = async (event: InvoicePaidEventData, txHash: s
     return null;
   }
 
-  const amountPaid = invoice.amountPaid + event.amount;
-  const status: PrismaInvoiceStatus =
-    amountPaid >= invoice.amount ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID;
   const paidAt = new Date(event.timestamp * 1000);
   const description = `Invoice #${event.invoiceId} payment${txHash ? ` (${txHash})` : ''}`;
 
   return prisma.$transaction(async (tx: any) => {
+    const transactionInvoice = await tx.invoice.findUniqueOrThrow({
+      where: { invoiceId: event.invoiceId },
+    });
+    const amountPaid = transactionInvoice.amountPaid + event.amount;
+    const status: PrismaInvoiceStatus =
+      amountPaid >= transactionInvoice.amount ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID;
+
     const updatedInvoice = await tx.invoice.update({
-      where: { id: invoice.id },
+      where: { id: transactionInvoice.id },
       data: {
         status,
         payer: event.payer,
