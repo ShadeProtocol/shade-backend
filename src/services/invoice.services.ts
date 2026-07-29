@@ -187,7 +187,8 @@ export const amendInvoice = async (merchantId: string, id: string, data: AmendIn
   }
 
   if (data.description !== undefined) {
-    const description = typeof data.description === 'string' ? data.description.trim() : data.description;
+    const description =
+      typeof data.description === 'string' ? data.description.trim() : data.description;
     if (typeof description !== 'string') {
       throw new AppError(400, 'description must be a string');
     }
