@@ -36,6 +36,9 @@ describe('Auth Routes', () => {
     jest.useFakeTimers({ now: mockDate });
     mockVerify.returns = true;
     mockKeypairError.throws = false;
+    prismaMock.$transaction.mockImplementation(
+      async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock),
+    );
   });
 
   afterEach(() => {
@@ -77,8 +80,14 @@ describe('Auth Routes', () => {
         nonce: generatedNonce,
         expiresAt: expiresAt.toISOString(),
       });
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
       expect(prismaMock.authNonce.deleteMany).toHaveBeenCalledWith({
-        where: { expiresAt: { lt: expect.any(Date) } },
+        where: {
+          OR: [
+            { expiresAt: { lt: mockDate } },
+            { address: validAddress, usedAt: null },
+          ],
+        },
       });
       expect(prismaMock.authNonce.create).toHaveBeenCalledWith({
         data: expect.objectContaining({

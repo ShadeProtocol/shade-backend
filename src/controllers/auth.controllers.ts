@@ -29,7 +29,13 @@ export const createChallengeController = async (req: Request, res: Response) => 
 
     const result = await createNonce(address);
     res.status(200).json(result);
-  } catch {
+  } catch (error) {
+    console.error('Failed to create auth challenge', {
+      path: req.path,
+      method: req.method,
+      address: typeof req.body?.address === 'string' ? req.body.address : undefined,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };

@@ -56,6 +56,9 @@ model AuthNonce {
   createdAt  DateTime  @default(now())
   merchantId String?
   merchant   Merchant? @relation(fields: [merchantId], references: [id])
+
+  @@index([address])
+  // Enforced in migration: unique (address) WHERE usedAt IS NULL
 }
 
 model RefreshToken {

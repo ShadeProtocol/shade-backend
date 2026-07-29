@@ -17,17 +17,22 @@ export function buildChallengeMessage(address: string, nonce: string, createdAt:
 }
 
 export async function createNonce(address: string) {
-  await prisma.authNonce.deleteMany({
-    where: { expiresAt: { lt: new Date() } },
-  });
-
+  const now = new Date();
   const nonce = crypto.randomBytes(32).toString('hex');
-  const createdAt = new Date();
+  const createdAt = now;
   const expiresAt = new Date(createdAt.getTime() + NONCE_EXPIRY_MS);
   const message = buildChallengeMessage(address, nonce, createdAt);
 
-  const authNonce = await prisma.authNonce.create({
-    data: { address, nonce, message, expiresAt },
+  const authNonce = await prisma.$transaction(async tx => {
+    await tx.authNonce.deleteMany({
+      where: {
+        OR: [{ expiresAt: { lt: now } }, { address, usedAt: null }],
+      },
+    });
+
+    return tx.authNonce.create({
+      data: { address, nonce, message, expiresAt },
+    });
   });
 
   return {
@@ -52,8 +57,7 @@ export async function verifySignature(address: string, nonce: string, rawSignatu
     return { valid: false, reason: 'Nonce expired' } as const;
   }
 
-  const message = buildChallengeMessage(address, authNonce.nonce, authNonce.createdAt);
-  const messageBytes = Buffer.from(message, 'utf-8');
+  const messageBytes = Buffer.from(authNonce.message, 'utf-8');
   const signatureBytes = Buffer.from(rawSignature, 'hex');
 
   let isValid: boolean;

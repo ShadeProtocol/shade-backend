@@ -1,7 +1,7 @@
 import { jest, beforeEach } from '@jest/globals';
 import { mockReset } from 'jest-mock-extended';
 
-const mockVerify = { returns: true };
+const mockVerify = { returns: true, lastMessage: undefined as string | undefined };
 const mockKeypairError = { throws: false };
 
 jest.unstable_mockModule('@stellar/stellar-sdk', () => ({
@@ -11,7 +11,10 @@ jest.unstable_mockModule('@stellar/stellar-sdk', () => ({
         throw new Error('invalid public key');
       }
       return {
-        verify: () => mockVerify.returns,
+        verify: (messageBytes: Buffer) => {
+          mockVerify.lastMessage = messageBytes.toString('utf-8');
+          return mockVerify.returns;
+        },
       };
     },
   },
@@ -39,7 +42,11 @@ describe('Auth Services', () => {
     mockReset(prismaMock);
     jest.useFakeTimers({ now: mockDate });
     mockVerify.returns = true;
+    mockVerify.lastMessage = undefined;
     mockKeypairError.throws = false;
+    prismaMock.$transaction.mockImplementation(
+      async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock),
+    );
   });
 
   afterEach(() => {
@@ -56,7 +63,7 @@ describe('Auth Services', () => {
   });
 
   describe('createNonce', () => {
-    test('should clean up expired nonces, create an AuthNonce, and return message, nonce, expiresAt', async () => {
+    test('should run cleanup and creation inside a transaction', async () => {
       const mockNonce = {
         id: 'uuid-1',
         address: 'GABCDEF123',
@@ -75,8 +82,14 @@ describe('Auth Services', () => {
 
       const result = await createNonce('GABCDEF123');
 
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
       expect(prismaMock.authNonce.deleteMany).toHaveBeenCalledWith({
-        where: { expiresAt: { lt: expect.any(Date) } },
+        where: {
+          OR: [
+            { expiresAt: { lt: mockDate } },
+            { address: 'GABCDEF123', usedAt: null },
+          ],
+        },
       });
       expect(result).toEqual({
         message: mockNonce.message,
@@ -94,6 +107,27 @@ describe('Auth Services', () => {
       expect(prismaMock.authNonce.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
         prismaMock.authNonce.create.mock.invocationCallOrder[0],
       );
+    });
+
+    test('should serialize concurrent requests through a single transaction callback', async () => {
+      const mockNonce = {
+        id: 'uuid-1',
+        address: 'GABCDEF123',
+        nonce: 'b'.repeat(64),
+        message: 'stored-message',
+        expiresAt: new Date('2026-06-21T12:05:00.000Z'),
+        usedAt: null,
+        createdAt: mockDate,
+      };
+
+      prismaMock.authNonce.deleteMany.mockResolvedValue({ count: 1 });
+      prismaMock.authNonce.create.mockResolvedValue(mockNonce);
+
+      await Promise.all([createNonce('GABCDEF123'), createNonce('GABCDEF123')]);
+
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
+      expect(prismaMock.authNonce.deleteMany).toHaveBeenCalledTimes(2);
+      expect(prismaMock.authNonce.create).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -122,6 +156,24 @@ describe('Auth Services', () => {
         where: { id: 'uuid-1' },
         data: { usedAt: expect.any(Date) },
       });
+    });
+
+    test('should verify using the stored message instead of reconstructing from createdAt', async () => {
+      const storedMessage =
+        'Shade Authentication\nAddress: GABCDEF123\nNonce: nonce-abc\nTimestamp: 2026-01-01T00:00:00.000Z';
+
+      prismaMock.authNonce.findUnique.mockResolvedValue({
+        ...mockAuthNonce,
+        message: storedMessage,
+        createdAt: new Date('2026-06-21T12:00:00.000Z'),
+      });
+      prismaMock.authNonce.update.mockResolvedValue(mockAuthNonce);
+
+      const result = await verifySignature(address, nonce, signature);
+
+      expect(result).toEqual({ valid: true, reason: null });
+      expect(mockVerify.lastMessage).toBe(storedMessage);
+      expect(mockVerify.lastMessage).not.toBe(buildChallengeMessage(address, nonce, mockDate));
     });
 
     test('should return invalid when nonce is not found', async () => {
