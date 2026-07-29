@@ -65,8 +65,12 @@ export const confirmPaymentController = async (req: Request, res: Response): Pro
       return;
     }
 
+    // Kept for backwards compatibility only. Client input is never used to
+    // mutate invoice payment state; InvoicePaid indexer events are authoritative.
     await confirmPayment(slug as string, payerAddress, txHash);
-    res.status(202).json({ message: 'Payment confirmation received' });
+    res.status(202).json({
+      message: 'Confirmation recorded; invoice payment state is updated from on-chain events.',
+    });
   } catch (error) {
     if (error instanceof AppError) {
       if (error.statusCode === 410 && error.message === 'expired') {

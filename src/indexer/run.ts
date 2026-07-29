@@ -1,3 +1,4 @@
+import './handlers/index.js';
 import { startPolling, stopPolling } from './poller.js';
 
 process.on('SIGINT', () => {
