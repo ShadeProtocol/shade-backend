@@ -28,6 +28,7 @@ module.exports = [
       'dist/**',
       'build/**',
       'coverage/**',
+      'tests/**',
       '**/*.d.ts',
       'eslint.config.cjs',
     ],

@@ -31,6 +31,8 @@ export const environment = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
   jwtSecret: process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production',
+  stellarHorizonUrl: process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org',
+  depositAccountEncryptionKey: process.env.DEPOSIT_ACCOUNT_ENCRYPTION_KEY || '',
   db: {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432', 10),

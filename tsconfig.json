@@ -4,6 +4,7 @@
     "moduleResolution": "NodeNext",
     "target": "ES2023",
     "strict": true,
+    "skipLibCheck": true,
     "isolatedModules": true,
     "esModuleInterop": true,
     "types": ["jest", "node"]
