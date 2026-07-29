@@ -1,4 +1,3 @@
-import { jest } from '@jest/globals';
 import { mockReset } from 'jest-mock-extended';
 
 const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;

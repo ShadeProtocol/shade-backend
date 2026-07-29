@@ -1,12 +1,42 @@
 import { Request, Response } from 'express';
-import { resolveInvoiceBySlug, confirmPayment } from '../services/pay.services.js';
+import {
+  resolveInvoiceBySlug,
+  confirmPayment,
+  getInvoiceForPdfBySlug,
+} from '../services/pay.services.js';
 import { AppError } from '../utils/errors.js';
+import { generateInvoicePdf } from '../services/invoice-pdf.services.js';
 
 export const resolveInvoiceController = async (req: Request, res: Response): Promise<void> => {
   try {
     const { slug } = req.params;
-    const invoice = await resolveInvoiceBySlug(slug);
+    const invoice = await resolveInvoiceBySlug(slug as string);
     res.status(200).json(invoice);
+  } catch (error) {
+    if (error instanceof AppError) {
+      if (error.statusCode === 410 && error.message === 'expired') {
+        res.status(410).json({ reason: 'expired' });
+        return;
+      }
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+export const getInvoicePdfController = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { slug } = req.params;
+    const invoice = await getInvoiceForPdfBySlug(slug as string);
+    const pdf = await generateInvoicePdf(invoice, invoice.merchant);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="invoice-${invoice.paymentSlug}.pdf"`,
+    );
+    res.status(200).send(pdf);
   } catch (error) {
     if (error instanceof AppError) {
       if (error.statusCode === 410 && error.message === 'expired') {
@@ -35,7 +65,7 @@ export const confirmPaymentController = async (req: Request, res: Response): Pro
       return;
     }
 
-    await confirmPayment(slug, payerAddress, txHash);
+    await confirmPayment(slug as string, payerAddress, txHash);
     res.status(202).json({ message: 'Payment confirmation received' });
   } catch (error) {
     if (error instanceof AppError) {

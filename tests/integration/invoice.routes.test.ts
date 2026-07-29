@@ -1,6 +1,15 @@
+import { jest } from '@jest/globals';
 import { mockReset } from 'jest-mock-extended';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
+
+const sendInvoiceEmailMock = jest.fn(async () => undefined);
+
+jest.unstable_mockModule('../../src/services/email.service.js', () => ({
+  __esModule: true,
+  sendOtp: jest.fn(async () => undefined),
+  sendInvoiceEmail: sendInvoiceEmailMock,
+}));
 
 const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
 const { environment } = await import('../../src/config/environment.js');
@@ -61,6 +70,7 @@ const auth = { Authorization: `Bearer ${accessToken}` };
 describe('Invoice routes', () => {
   beforeEach(() => {
     mockReset(prismaMock);
+    sendInvoiceEmailMock.mockClear();
   });
 
   describe('POST /api/v1/invoices', () => {
@@ -201,6 +211,86 @@ describe('Invoice routes', () => {
 
       expect(response.status).toBe(400);
       expect(prismaMock.invoice.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /api/v1/invoices/:id/pdf', () => {
+    test('returns 401 when unauthenticated', async () => {
+      const response = await request(app).get('/api/v1/invoices/invoice-1/pdf');
+
+      expect(response.status).toBe(401);
+    });
+
+    test('returns 404 when the invoice is missing or owned by another merchant', async () => {
+      authenticate();
+      prismaMock.invoice.findFirst.mockResolvedValue(null);
+
+      const response = await request(app).get('/api/v1/invoices/other/pdf').set(auth);
+
+      expect(response.status).toBe(404);
+    });
+
+    test('streams a real PDF scoped to the authenticated merchant, never touching disk', async () => {
+      authenticate();
+      prismaMock.invoice.findFirst.mockResolvedValue({ ...baseInvoice, merchant } as any);
+
+      const response = await request(app).get('/api/v1/invoices/invoice-1/pdf').set(auth);
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toContain('application/pdf');
+      expect(response.headers['content-disposition']).toBe(
+        `attachment; filename="invoice-${baseInvoice.paymentSlug}.pdf"`,
+      );
+      const body = response.body as Buffer;
+      expect(Buffer.isBuffer(body)).toBe(true);
+      expect(body.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+
+      const findArgs = prismaMock.invoice.findFirst.mock.calls[0][0];
+      expect(findArgs.where).toMatchObject({ id: 'invoice-1', merchantId: MERCHANT_ID });
+    });
+  });
+
+  describe('POST /api/v1/invoices/:id/send', () => {
+    test('returns 401 when unauthenticated', async () => {
+      const response = await request(app).post('/api/v1/invoices/invoice-1/send');
+
+      expect(response.status).toBe(401);
+      expect(sendInvoiceEmailMock).not.toHaveBeenCalled();
+    });
+
+    test('returns 404 when the invoice is missing or owned by another merchant', async () => {
+      authenticate();
+      prismaMock.invoice.findFirst.mockResolvedValue(null);
+
+      const response = await request(app).post('/api/v1/invoices/other/send').set(auth);
+
+      expect(response.status).toBe(404);
+      expect(sendInvoiceEmailMock).not.toHaveBeenCalled();
+    });
+
+    test('returns 400 and does not attempt to send when the invoice has no email set', async () => {
+      authenticate();
+      prismaMock.invoice.findFirst.mockResolvedValue({
+        ...baseInvoice,
+        email: null,
+        merchant,
+      } as any);
+
+      const response = await request(app).post('/api/v1/invoices/invoice-1/send').set(auth);
+
+      expect(response.status).toBe(400);
+      expect(sendInvoiceEmailMock).not.toHaveBeenCalled();
+    });
+
+    test('sends the invoice email when invoice.email is set', async () => {
+      authenticate();
+      const invoiceWithEmail = { ...baseInvoice, email: 'payer@example.com', merchant };
+      prismaMock.invoice.findFirst.mockResolvedValue(invoiceWithEmail as any);
+
+      const response = await request(app).post('/api/v1/invoices/invoice-1/send').set(auth);
+
+      expect(response.status).toBe(200);
+      expect(sendInvoiceEmailMock).toHaveBeenCalledWith(invoiceWithEmail, merchant);
     });
   });
 });

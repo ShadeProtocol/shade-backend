@@ -1,4 +1,3 @@
-import { jest } from '@jest/globals';
 import { mockReset } from 'jest-mock-extended';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';

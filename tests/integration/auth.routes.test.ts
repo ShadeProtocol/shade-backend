@@ -22,7 +22,7 @@ jest.unstable_mockModule('@stellar/stellar-sdk', () => ({
   },
 }));
 
-const { default: prismaMock } = await import('../../src/config/prisma.js') as any;
+const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
 const { default: app } = await import('../../src/app.js');
 
 const address = 'GABCDEF123';
@@ -248,9 +248,7 @@ describe('Auth Routes', () => {
     });
 
     test('should return 400 when required fields are missing', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/verify')
-        .send({});
+      const response = await request(app).post('/api/v1/auth/verify').send({});
 
       expect(response.status).toBe(400);
     });

@@ -2,7 +2,6 @@ import { jest } from '@jest/globals';
 import { mockReset } from 'jest-mock-extended';
 import request from 'supertest';
 import {
-  TEST_API_KEY_PREFIX,
   TEST_KEY_HASH,
   TEST_KEY_PREFIX_DISPLAY,
   TEST_RAW_API_KEY,

@@ -21,7 +21,7 @@ jest.unstable_mockModule('@stellar/stellar-sdk', () => ({
   },
 }));
 
-const { default: prismaMock } = await import('../../src/config/prisma.js') as any;
+const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;
 const { environment } = await import('../../src/config/environment.js');
 const {
   authenticateWallet,

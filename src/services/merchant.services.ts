@@ -43,39 +43,27 @@ export const sanitizeMerchant = (merchant: Merchant) => ({
 });
 
 export const createMerchant = async (merchantData: MerchantData) => {
-  try {
-    const merchant = await prisma.merchant.create({
-      data: merchantData,
-    });
-    return merchant;
-  } catch (error) {
-    throw error;
-  }
+  const merchant = await prisma.merchant.create({
+    data: merchantData,
+  });
+  return merchant;
 };
 
 export const getMerchant = async (merchantId: number) => {
-  try {
-    const merchant = await prisma.merchant.findUnique({
-      where: {
-        merchantId: merchantId,
-      },
-    });
-    return merchant;
-  } catch (error) {
-    throw error;
-  }
+  const merchant = await prisma.merchant.findUnique({
+    where: {
+      merchantId: merchantId,
+    },
+  });
+  return merchant;
 };
 
 export const listMerchants = async (limit: number, offset: number) => {
-  try {
-    const merchants = await prisma.merchant.findMany({
-      take: limit,
-      skip: offset,
-    });
-    return merchants;
-  } catch (error) {
-    throw error;
-  }
+  const merchants = await prisma.merchant.findMany({
+    take: limit,
+    skip: offset,
+  });
+  return merchants;
 };
 
 /**

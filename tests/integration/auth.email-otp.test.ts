@@ -7,6 +7,7 @@ const sendOtpMock = jest.fn(async () => undefined);
 jest.unstable_mockModule('../../src/services/email.service.js', () => ({
   __esModule: true,
   sendOtp: sendOtpMock,
+  sendInvoiceEmail: jest.fn(async () => undefined),
 }));
 
 const { default: prismaMock } = (await import('../../src/config/prisma.js')) as any;

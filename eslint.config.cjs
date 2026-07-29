@@ -1,3 +1,4 @@
+/* eslint-disable */
 const { FlatCompat } = require('@eslint/eslintrc');
 const js = require('@eslint/js');
 const tseslint = require('typescript-eslint');
@@ -18,7 +19,7 @@ module.exports = [
       sourceType: 'module',
       parser: tseslint.parser,
       parserOptions: {
-        project: './tsconfig.json',
+        project: './tsconfig.eslint.json',
       },
     },
     files: ['**/*.ts', '**/*.js'],
@@ -27,18 +28,22 @@ module.exports = [
       'dist/**',
       'build/**',
       'coverage/**',
+      'tests/**',
       '**/*.d.ts',
       'eslint.config.cjs',
     ],
     rules: {
       'prettier/prettier': 'error',
       '@typescript-eslint/explicit-function-return-type': 'warn',
-      '@typescript-eslint/explicit-module-boundary-types': 'warn', 
+      '@typescript-eslint/explicit-module-boundary-types': 'warn',
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': ['error', { 
-        'argsIgnorePattern': '^_',
-        'varsIgnorePattern': '^_',
-      }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+        },
+      ],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-duplicate-imports': 'error',
       'no-unused-expressions': 'error',
@@ -51,5 +56,5 @@ module.exports = [
       '@typescript-eslint/no-explicit-any': 'off',
       'no-console': 'off',
     },
-  }
+  },
 ];

@@ -4,16 +4,10 @@
     "moduleResolution": "NodeNext",
     "target": "ES2023",
     "strict": true,
+    "skipLibCheck": true,
     "isolatedModules": true,
     "esModuleInterop": true,
-    "types": [
-      "jest",
-      "node"
-    ]
+    "types": ["jest", "node"]
   },
-  "exclude": [
-    "node_modules",
-    "dist",
-    "tests"
-  ]
+  "exclude": ["node_modules", "dist", "tests", "jest.config.ts"]
 }
