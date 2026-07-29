@@ -8,11 +8,7 @@ const NONCE_EXPIRY_MS = 5 * 60 * 1000;
 const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_NONCE_CREATE_ATTEMPTS = 3;
 
-function formatChallengeResponse(authNonce: {
-  message: string;
-  nonce: string;
-  expiresAt: Date;
-}) {
+function formatChallengeResponse(authNonce: { message: string; nonce: string; expiresAt: Date }) {
   return {
     message: authNonce.message,
     nonce: authNonce.nonce,
