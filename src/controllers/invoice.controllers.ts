@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import {
+  amendInvoice,
   createInvoice,
   getInvoice,
   getInvoiceWithMerchant,
@@ -68,6 +69,25 @@ export const getInvoiceController = async (req: Request, res: Response): Promise
 
   try {
     const invoice = await getInvoice(merchant.id, req.params.id as string);
+    res.status(200).json(invoice);
+  } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+export const amendInvoiceController = async (req: Request, res: Response): Promise<void> => {
+  const merchant = req.merchant;
+  if (!merchant) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  try {
+    const invoice = await amendInvoice(merchant.id, req.params.id, req.body);
     res.status(200).json(invoice);
   } catch (error) {
     if (error instanceof AppError) {
