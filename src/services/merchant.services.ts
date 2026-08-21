@@ -191,6 +191,25 @@ export const generateMerchantSigningKey = async (id: string) => {
  * `logo`/`webhook` is normalized to null so the merchant can clear them.
  * Non-editable fields are never read here, so they cannot be changed.
  */
+/**
+ * Deactivates a merchant (admin action). Sets Merchant.active = false only;
+ * this does not currently gate login, invoice creation, or any other flow.
+ */
+export const blockMerchant = async (id: string) => {
+  const merchant = await prisma.merchant.findUnique({ where: { id } });
+
+  if (!merchant) {
+    throw new AppError(404, 'Merchant not found');
+  }
+
+  const updated = await prisma.merchant.update({
+    where: { id },
+    data: { active: false },
+  });
+
+  return sanitizeMerchant(updated);
+};
+
 export const updateMyProfile = async (id: string, data: UpdateMerchantInput) => {
   const updateData: Prisma.MerchantUpdateInput = {};
 
