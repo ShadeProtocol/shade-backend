@@ -8,7 +8,12 @@ import {
   InvoicePagination,
   parseAmount,
 } from '../utils/invoice.validation.js';
-import type { InvoicePaidEventData } from '../indexer/types.js';
+import type {
+  InvoicePaidEventData,
+  InvoicePartiallyRefundedEventData,
+  InvoiceRefundedEventData,
+} from '../indexer/types.js';
+import { recordVolumeEvent } from './analytics.services.js';
 import { recordAuditLog, ActorType } from './audit-log.services.js';
 
 const SLUG_MAX_RETRIES = 5;
@@ -23,6 +28,8 @@ const InvoiceStatus = {
   PAID: 'PAID',
   PARTIALLY_PAID: 'PARTIALLY_PAID',
   CANCELLED: 'CANCELLED',
+  REFUNDED: 'REFUNDED',
+  PARTIALLY_REFUNDED: 'PARTIALLY_REFUNDED',
 } as const satisfies Record<string, PrismaInvoiceStatus>;
 
 const TransactionType = {
@@ -310,6 +317,16 @@ export const applyInvoicePayment = async (event: InvoicePaidEventData, txHash: s
       },
     });
 
+    await recordVolumeEvent(tx, {
+      merchantId: merchant.id,
+      token: event.token,
+      // The contract feeds its own analytics the gross amount and the fee taken
+      // out of it, so the projection mirrors that rather than merchantAmount.
+      volume: event.amount,
+      fee: event.fee,
+      occurredAt: paidAt,
+    });
+
     return { invoice: updatedInvoice, transaction };
   });
 
@@ -329,4 +346,63 @@ export const applyInvoicePayment = async (event: InvoicePaidEventData, txHash: s
   });
 
   return result;
+};
+
+const clampRefund = (reported: bigint, alreadyRefunded: bigint, invoiceAmount: bigint): bigint => {
+  if (reported > invoiceAmount) return invoiceAmount;
+  if (reported < alreadyRefunded) return alreadyRefunded;
+  return reported;
+};
+
+/**
+ * Applies a confirmed on-chain refund to the backend projection.
+ *
+ * Refunds deliberately do not touch MerchantAnalytics/TokenAnalytics/
+ * PlatformDailyStats: the contract's `record_merchant_payment` is only reached
+ * from the payment paths (invoice payment, subscription charge, ticket sale)
+ * and never from `refund_invoice`/`refund_invoice_partial`, so on-chain
+ * `total_volume` is not reduced by a refund. Refund totals are read back
+ * separately from `Invoice.amountRefunded`.
+ */
+export const applyInvoiceRefund = async (
+  event: InvoiceRefundedEventData | InvoicePartiallyRefundedEventData,
+  txHash: string,
+) => {
+  const invoice = await prisma.invoice.findUnique({
+    where: { invoiceId: event.invoiceId },
+  });
+
+  if (!invoice) {
+    console.warn(
+      `Refund event for invoice ${event.invoiceId} (${txHash}) skipped: invoice is not in the database.`,
+    );
+    return null;
+  }
+
+  return prisma.$transaction(async (tx: any) => {
+    const current = await tx.invoice.findUniqueOrThrow({
+      where: { invoiceId: event.invoiceId },
+    });
+
+    // Both refund events report an absolute total, never an increment: the
+    // partial event carries `total_amount_refunded`, and the full event's
+    // `amount` is the invoice's whole amount — `refund_invoice` and the
+    // completing branch of `refund_invoice_partial` both pass `invoice.amount`,
+    // not the chunk just refunded.
+    const reportedRefund =
+      'totalAmountRefunded' in event ? event.totalAmountRefunded : event.amount;
+
+    // Clamped to the invoice total and never allowed to move backwards, so a
+    // replayed or out-of-order refund event cannot skew the refund total that
+    // /admin/analytics/summary reports.
+    const amountRefunded = clampRefund(reportedRefund, current.amountRefunded, current.amount);
+
+    const status: PrismaInvoiceStatus =
+      amountRefunded >= current.amount ? InvoiceStatus.REFUNDED : InvoiceStatus.PARTIALLY_REFUNDED;
+
+    return tx.invoice.update({
+      where: { id: current.id },
+      data: { amountRefunded, status },
+    });
+  });
 };

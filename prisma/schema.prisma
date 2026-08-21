@@ -318,3 +318,19 @@ model DepositAccount {
   invoice         Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
 }
 
+
+// Protocol-wide daily rollup. One row per UTC calendar day, upserted by the
+// indexer as events arrive (no scheduled batch job), mirroring how
+// MerchantAnalytics/TokenAnalytics are maintained.
+model PlatformDailyStats {
+  id               String   @id @default(uuid())
+  date             DateTime @unique
+  totalVolume      BigInt   @default(0)
+  totalFees        BigInt   @default(0)
+  transactionCount BigInt   @default(0)
+  newInvoices      Int      @default(0)
+  newMerchants     Int      @default(0)
+  newSubscriptions Int      @default(0)
+  newTickets       Int      @default(0)
+  updatedAt        DateTime @updatedAt
+}
