@@ -9,11 +9,13 @@ import {
   parseAmount,
 } from '../utils/invoice.validation.js';
 import type {
+  InvoiceCreatedEventData,
   InvoicePaidEventData,
   InvoicePartiallyRefundedEventData,
   InvoiceRefundedEventData,
 } from '../indexer/types.js';
-import { recordVolumeEvent } from './analytics.services.js';
+import type { OnChainInvoiceDetails } from '../indexer/contractReader.js';
+import { recordDailyStats, recordVolumeEvent } from './analytics.services.js';
 import { recordAuditLog, ActorType } from './audit-log.services.js';
 
 const SLUG_MAX_RETRIES = 5;
@@ -67,30 +69,21 @@ const isUniqueSlugError = (error: unknown): boolean => {
   return code === 'P2002' && Array.isArray(meta?.target) && meta.target.includes('paymentSlug');
 };
 
-export const createInvoice = async (merchantId: string, data: CreateInvoiceInput) => {
-  const amount = parseAmount(data.amount);
-  if (amount === null) {
-    throw new AppError(400, 'amount must be a positive integer');
-  }
-
-  const status: PrismaInvoiceStatus = data.isDraft ? InvoiceStatus.DRAFT : InvoiceStatus.PENDING;
-  const expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
-
+/**
+ * Creates an invoice, retrying on the (vanishingly unlikely) event that the
+ * generated payment slug collides with an existing one. `client` is either the
+ * root Prisma client or an interactive-transaction client.
+ */
+const createInvoiceWithUniqueSlug = async (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  client: any,
+  data: Omit<Prisma.InvoiceUncheckedCreateInput, 'paymentSlug'>,
+): Promise<Invoice> => {
   for (let attempt = 0; attempt < SLUG_MAX_RETRIES; attempt++) {
     try {
-      const invoice = await prisma.invoice.create({
-        data: {
-          merchantId,
-          description: data.description.trim(),
-          amount,
-          token: data.token.trim(),
-          email: data.payerEmail?.trim() ?? null,
-          expiresAt,
-          status,
-          paymentSlug: generatePaymentSlug(),
-        },
+      return await client.invoice.create({
+        data: { ...data, paymentSlug: generatePaymentSlug() },
       });
-      return sanitizeInvoice(invoice);
     } catch (error) {
       if (isUniqueSlugError(error) && attempt < SLUG_MAX_RETRIES - 1) {
         continue;
@@ -100,6 +93,28 @@ export const createInvoice = async (merchantId: string, data: CreateInvoiceInput
   }
 
   throw new AppError(500, 'Failed to generate a unique payment slug');
+};
+
+export const createInvoice = async (merchantId: string, data: CreateInvoiceInput) => {
+  const amount = parseAmount(data.amount);
+  if (amount === null) {
+    throw new AppError(400, 'amount must be a positive integer');
+  }
+
+  const status: PrismaInvoiceStatus = data.isDraft ? InvoiceStatus.DRAFT : InvoiceStatus.PENDING;
+  const expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
+
+  const invoice = await createInvoiceWithUniqueSlug(prisma, {
+    merchantId,
+    description: data.description.trim(),
+    amount,
+    token: data.token.trim(),
+    email: data.payerEmail?.trim() ?? null,
+    expiresAt,
+    status,
+  });
+
+  return sanitizeInvoice(invoice);
 };
 
 export const listInvoices = async (
@@ -244,6 +259,179 @@ export const voidInvoice = async (merchantId: string, id: string) => {
   });
 
   return sanitizeInvoice(updated);
+};
+
+/**
+ * Applies an on-chain `InvoiceCreatedEvent` to the backend projection.
+ *
+ * ---------------------------------------------------------------------------
+ * WARNING: the correlation performed here is a best-effort heuristic, not a
+ * guaranteed-correct match. It is not a solved problem yet.
+ * ---------------------------------------------------------------------------
+ *
+ * Invoices in this backend are created off-chain first: POST /invoices writes
+ * an Invoice row with `invoiceId: null` before anything touches the chain, and
+ * nothing in this codebase currently submits `create_invoice` /
+ * `create_invoice_signed` on a merchant's behalf. So there is no established
+ * link between an off-chain row and the on-chain invoice id, and two different
+ * futures are both still open:
+ *
+ *   1. A relay path where this backend submits `create_invoice_signed` at the
+ *      moment POST /invoices is called and captures `invoice_id` synchronously
+ *      from the transaction result. If that lands, this function becomes a
+ *      backup/reconciliation path rather than the primary way `invoiceId` gets
+ *      set — and it already tolerates that: an invoice whose `invoiceId` the
+ *      relay already filled in is left alone.
+ *   2. Invoices that originate entirely on-chain, from a merchant's own SDK
+ *      integration calling `create_invoice` directly and bypassing our API. For
+ *      those this handler is the only way the backend ever learns the invoice
+ *      exists, so an unmatched event creates a row rather than being dropped.
+ *
+ * The clean fix is correlation by nonce: `create_invoice_signed` already takes
+ * a `nonce: BytesN<32>` for replay protection, and a future relay issue could
+ * set that nonce to the off-chain `Invoice.id` before submitting, turning this
+ * guesswork into an exact lookup. That depends on the relay existing first, so
+ * it is deliberately not implemented here.
+ *
+ * Until then the match is: an unlinked (`invoiceId: null`) invoice for the same
+ * merchant, amount, token and description. `InvoiceCreatedEvent` does not carry
+ * a description (verified against a live testnet event), so the description
+ * comes from reading `get_invoice` back off the contract; when that read fails
+ * the match falls back to merchant + amount + token alone, which is weaker, and
+ * says so in the log. Candidates are restricted to DRAFT/PENDING because the
+ * contract only emits this event for an invoice it has just put in `Pending` —
+ * linking a cancelled, paid or refunded off-chain row would be wrong.
+ *
+ * More than one candidate is ambiguous. Rather than guess, it logs loudly and
+ * creates a separate row, so the duplicate is visible and repairable instead of
+ * silently attached to the wrong invoice.
+ *
+ * The IndexerEvent table remains the only replay guard; the `invoiceId` lookup
+ * below is a natural-key existence check that makes "link or create" work, not
+ * a second idempotency mechanism.
+ */
+export const applyInvoiceCreated = async (
+  event: InvoiceCreatedEventData,
+  txHash: string,
+  occurredAt: Date,
+  /**
+   * What `get_invoice` returned for this invoice, or null if the contract could
+   * not be read. Passed in by the handler rather than fetched here so the RPC
+   * round-trip stays at the indexer edge and this service remains pure
+   * persistence — see ../indexer/handlers/invoiceCreated.ts.
+   */
+  onChain: OnChainInvoiceDetails | null,
+) => {
+  // The event carries the merchant's Address, not the numeric merchant_id
+  // (verified against a live testnet event), so it resolves via Merchant.address.
+  const merchant = await prisma.merchant.findUnique({
+    where: { address: event.merchant },
+  });
+
+  const description = onChain?.description ?? null;
+
+  const outcome = await prisma.$transaction(async (tx: any) => {
+    // The protocol-wide "new invoices today" counter is driven by the event
+    // itself, not by whether a row could be linked or created, so growth
+    // reporting is unchanged from when this event only recorded daily stats.
+    await recordDailyStats(tx, occurredAt, { newInvoices: 1 });
+
+    if (!merchant) {
+      console.warn(
+        `InvoiceCreated event for invoice ${event.invoiceId} (${txHash}) not applied: merchant ${event.merchant} is not in the database.`,
+      );
+      return null;
+    }
+
+    const alreadyLinked = await tx.invoice.findUnique({
+      where: { invoiceId: event.invoiceId },
+    });
+    if (alreadyLinked) {
+      return { invoice: alreadyLinked as Invoice, outcome: 'already-linked' as const };
+    }
+
+    const candidates: Invoice[] = await tx.invoice.findMany({
+      where: {
+        merchantId: merchant.id,
+        invoiceId: null,
+        amount: event.amount,
+        token: event.token,
+        status: { in: [InvoiceStatus.DRAFT, InvoiceStatus.PENDING] },
+        ...(description === null ? {} : { description }),
+      },
+    });
+
+    if (candidates.length === 1) {
+      const linked = await tx.invoice.update({
+        where: { id: candidates[0].id },
+        data: { invoiceId: event.invoiceId, status: InvoiceStatus.PENDING },
+      });
+      return { invoice: linked as Invoice, outcome: 'linked' as const };
+    }
+
+    if (candidates.length > 1) {
+      console.error(
+        `AMBIGUOUS InvoiceCreated correlation: on-chain invoice ${event.invoiceId} (${txHash}) matched ${candidates.length} unlinked invoices for merchant ${event.merchant} ` +
+          `[${candidates.map(candidate => candidate.id).join(', ')}]. ` +
+          'Refusing to guess; creating a separate invoice row instead. ' +
+          'These rows need manual reconciliation, and correlation needs the nonce-based fix described on applyInvoiceCreated.',
+      );
+    } else if (description === null) {
+      console.warn(
+        `InvoiceCreated correlation for invoice ${event.invoiceId} (${txHash}) ran without an on-chain description; matched on merchant, amount and token only.`,
+      );
+    }
+
+    const created = await createInvoiceWithUniqueSlug(tx, {
+      invoiceId: event.invoiceId,
+      merchantId: merchant.id,
+      // The event has no description and the contract read did not produce one,
+      // so this placeholder marks the row as needing reconciliation rather than
+      // inventing a plausible-looking description.
+      description: description ?? `On-chain invoice #${event.invoiceId}`,
+      amount: event.amount,
+      token: event.token,
+      // The contract emits this event only for invoices it has just moved into
+      // `Pending`; `create_invoice_draft` deliberately emits nothing.
+      status: InvoiceStatus.PENDING,
+      expiresAt: onChain?.expiresAt ?? null,
+      // Backdated to the ledger close time so a historical replay does not
+      // report every on-chain invoice as created on the day of the replay.
+      createdAt: occurredAt,
+    });
+
+    return {
+      invoice: created,
+      outcome: (candidates.length > 1 ? 'created-ambiguous' : 'created') as
+        | 'created'
+        | 'created-ambiguous',
+    };
+  });
+
+  if (!outcome || outcome.outcome === 'already-linked') {
+    return outcome;
+  }
+
+  await recordAuditLog({
+    action: 'invoice.created',
+    actorType: ActorType.MERCHANT,
+    actorId: merchant?.id,
+    actorLabel: event.merchant,
+    targetType: 'Invoice',
+    targetId: outcome.invoice.id,
+    metadata: {
+      // Distinguishes this from the off-chain POST /invoices call site, which
+      // records the same action.
+      source: 'on-chain',
+      correlation: outcome.outcome,
+      invoiceId: event.invoiceId,
+      amount: event.amount.toString(),
+      token: event.token,
+      txHash,
+    },
+  });
+
+  return outcome;
 };
 
 /**
