@@ -27,6 +27,35 @@ model AdminRefreshToken {
   createdAt DateTime @default(now())
 }
 
+enum ActorType {
+  ADMIN
+  MERCHANT
+  ANONYMOUS
+  SYSTEM
+}
+
+// Cross-cutting audit trail for every state-changing action, on-chain or off-chain.
+// actorId is a loose reference (no FK) to Admin.id or Merchant.id — it must be able
+// to represent an anonymous on-chain address or a system action without forcing a
+// fake Admin/Merchant row into existence. recordAuditLog in audit-log.services.ts
+// is the only place that should write to this model.
+model AdminLog {
+  id         String    @id @default(uuid())
+  action     String
+  actorType  ActorType
+  actorId    String?
+  actorLabel String
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([actorType, actorId])
+  @@index([targetType, targetId])
+  @@index([action])
+  @@index([createdAt])
+}
+
 model Merchant {
   id            String    @id @default(uuid())
   merchantId    Int       @unique
