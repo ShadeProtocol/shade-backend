@@ -190,5 +190,11 @@ describe('Admin Auth Routes', () => {
 
       expect(response.status).toBe(400);
     });
+
+    test('returns 400 when the request has no body at all', async () => {
+      const response = await request(app).post('/api/v1/admin/auth/verify');
+
+      expect(response.status).toBe(400);
+    });
   });
 });

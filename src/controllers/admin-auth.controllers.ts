@@ -26,7 +26,7 @@ export const createAdminChallengeController = async (req: Request, res: Response
 
 export const verifyAdminSignatureController = async (req: Request, res: Response) => {
   try {
-    const { address, nonce, signature } = req.body;
+    const { address, nonce, signature } = req.body ?? {};
     if (!address || !nonce || !signature) {
       res.status(400).json({ error: 'address, nonce, and signature are required' });
       return;
@@ -48,7 +48,12 @@ export const verifyAdminSignatureController = async (req: Request, res: Response
       refreshToken: result.refreshToken,
       admin: result.admin,
     });
-  } catch {
+  } catch (error) {
+    console.error('Failed to verify admin auth signature', {
+      path: req.path,
+      method: req.method,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
