@@ -9,10 +9,13 @@
  * there is no behavior change here, only documentation.
  *
  * None of these topic strings have been observed against a live deployment —
- * they are inferred from the one confirmed convention in this codebase
- * (`#[contractevent] InvoicePaidEvent` -> topic "InvoicePaid", see
- * ../handlers/invoicePaid.ts). Do not build a decoder from this file alone;
- * verify the actual event payload shape against the deployed contract first.
+ * they are inferred from the naming convention that the handled events do
+ * confirm (`#[contractevent] InvoicePaidEvent` -> topic "invoice_paid_event").
+ * Do not build a decoder from this file alone; verify the actual event payload
+ * shape against a real testnet event first. That check is not a formality: the
+ * payload is routinely narrower than the struct it is named after —
+ * `SubscriptionPlanCreatedEvent` omits the plan's `description`, and
+ * `InvoiceCreatedEvent` omits both `description` and any timestamp.
  *
  * When wiring one of these for real: add a decoder to ../types.ts, a handler
  * to ../handlers/ (see invoicePaid.ts for the pattern), register it in
@@ -43,7 +46,6 @@
  * merchant.account_restricted        <- AccountRestricted
  *
  * ---- On-chain events: Invoice Lifecycle (beyond InvoicePaid) ----
- * invoice.created (on-chain)          <- InvoiceCreated
  * invoice.payment_split_routed        <- PaymentSplitRouted
  * invoice.refunded / partially_refunded <- InvoiceRefunded / InvoicePartiallyRefunded
  * invoice.cancelled (on-chain)        <- InvoiceCancelled
@@ -52,12 +54,12 @@
  *                                        the real invoice.amended call site)
  * invoice.fiat_priced                 <- FiatInvoicePriced
  *
- * ---- On-chain events: Subscription Lifecycle (no service exists at all) ----
- * subscription_plan.created    <- SubscriptionPlanCreated
+ * ---- On-chain events: Subscription Lifecycle ----
  * subscription_plan.deactivated <- PlanDeactivated
- * subscription.created          <- Subscribed
- * subscription.charged          <- SubscriptionCharged
  * subscription.cancelled        <- SubscriptionCancelled
+ * (subscription_plan.created, subscription.created and subscription.charged are
+ *  implemented — see ../handlers/subscriptionPlanCreated.ts, ./subscribed.ts and
+ *  ./subscriptionCharged.ts)
  *
  * ---- On-chain events: Account Contract / Withdrawals ----
  * account.initialized / verified <- AccountInitialized / AccountVerified

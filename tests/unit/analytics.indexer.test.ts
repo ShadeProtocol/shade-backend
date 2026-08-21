@@ -494,9 +494,11 @@ describe('growth handlers', () => {
   });
 
   test('status and governance events stay unhandled', async () => {
+    // subscription_plan_created_event used to belong on this list. It now has a
+    // handler of its own (see creation-events.indexer.test.ts), so only the
+    // genuinely unhandled topics remain.
     await dispatchGrowth('merchant_status_changed_event', { merchant_id: 7n, active: false });
     await dispatchGrowth('role_granted_event', { admin: 'GADMIN', user: 'GUSER' });
-    await dispatchGrowth('subscription_plan_created_event', { plan_id: 12n });
     await dispatchGrowth('event_created_event', { event_id: 3n });
 
     expect(prismaMock.platformDailyStats.upsert).not.toHaveBeenCalled();

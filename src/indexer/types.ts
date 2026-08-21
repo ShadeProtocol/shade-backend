@@ -72,12 +72,36 @@ export interface MerchantRegisteredEventData {
   timestamp: number;
 }
 
-/** Note: the contract's `InvoiceCreatedEvent` carries no timestamp field. */
+/**
+ * Confirmed against a live testnet event (see decodeInvoiceCreatedEventData):
+ * `InvoiceCreatedEvent` carries neither a timestamp nor a description field.
+ * `merchant` is the merchant's Address (`G...`), not the numeric merchant_id.
+ */
 export interface InvoiceCreatedEventData {
   invoiceId: number;
   merchant: string;
   amount: bigint;
   token: string;
+}
+
+/**
+ * Confirmed against a live testnet event: `SubscriptionPlanCreatedEvent`
+ * carries no `description`, even though the contract's own `SubscriptionPlan`
+ * struct (and our `SubscriptionPlan` model) has one as a required field. The
+ * description has to be read back separately with `get_subscription_plan` —
+ * see fetchSubscriptionPlanDescription in ./contractReader.ts.
+ *
+ * `merchant` is the merchant's Address (`G...`), not the plan's numeric
+ * `merchant_id`; the struct has both, and the event emits the Address.
+ */
+export interface SubscriptionPlanCreatedEventData {
+  planId: number;
+  merchant: string;
+  token: string;
+  amount: bigint;
+  /** Billing interval in seconds. */
+  interval: number;
+  timestamp: number;
 }
 
 export interface SubscribedEventData {
@@ -243,6 +267,11 @@ export const decodeMerchantRegisteredEventData = (data: unknown): MerchantRegist
   };
 };
 
+/**
+ * Field list verified against a real `invoice_created_event` emitted on testnet
+ * and decoded with `scValToNative`:
+ *   { invoice_id: bigint, merchant: 'G...', amount: bigint, token: 'C...' }
+ */
 export const decodeInvoiceCreatedEventData = (data: unknown): InvoiceCreatedEventData => {
   const event = readEvent('InvoiceCreated', data);
 
@@ -254,6 +283,34 @@ export const decodeInvoiceCreatedEventData = (data: unknown): InvoiceCreatedEven
   };
 };
 
+/**
+ * Field list verified against a real `subscription_plan_created_event` emitted
+ * on testnet and decoded with `scValToNative`:
+ *   { plan_id: bigint, merchant: 'G...', token: 'C...', amount: bigint,
+ *     interval: bigint, timestamp: bigint }
+ * Note the absence of `description`.
+ */
+export const decodeSubscriptionPlanCreatedEventData = (
+  data: unknown,
+): SubscriptionPlanCreatedEventData => {
+  const event = readEvent('SubscriptionPlanCreated', data);
+
+  return {
+    planId: event.number('plan_id'),
+    merchant: event.string('merchant'),
+    token: event.string('token'),
+    amount: event.bigint('amount'),
+    interval: event.number('interval'),
+    timestamp: event.number('timestamp'),
+  };
+};
+
+/**
+ * Field list verified against a real `subscribed_event` emitted on testnet and
+ * decoded with `scValToNative`:
+ *   { subscription_id: bigint, plan_id: bigint, customer: 'G...', timestamp: bigint }
+ * The event carries no merchant; it is resolved through the plan.
+ */
 export const decodeSubscribedEventData = (data: unknown): SubscribedEventData => {
   const event = readEvent('Subscribed', data);
 
