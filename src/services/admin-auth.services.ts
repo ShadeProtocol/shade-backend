@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import prisma from '../config/prisma.js';
 import { environment } from '../config/environment.js';
 import { verifySignature } from './auth.services.js';
+import { recordAuditLog, ActorType } from './audit-log.services.js';
 
 const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -26,19 +27,47 @@ export async function issueAdminRefreshToken(adminId: string): Promise<string> {
 export async function authenticateAdminWallet(address: string, nonce: string, signature: string) {
   const verification = await verifySignature(address, nonce, signature);
   if (!verification.valid) {
+    await recordAuditLog({
+      action: 'admin.login_failed',
+      actorType: ActorType.ANONYMOUS,
+      actorLabel: address,
+      metadata: { reason: verification.reason },
+    });
     return { success: false, reason: verification.reason } as const;
   }
 
   const admin = await prisma.admin.findUnique({ where: { address } });
-  if (!admin || !admin.active) {
-    // TODO: record an audit log entry for this failed login attempt once recordAuditLog lands.
+  if (!admin) {
+    await recordAuditLog({
+      action: 'admin.login_failed',
+      actorType: ActorType.ANONYMOUS,
+      actorLabel: address,
+      metadata: { reason: 'Not an admin' },
+    });
+    return { success: false, reason: 'Not an admin' } as const;
+  }
+
+  if (!admin.active) {
+    await recordAuditLog({
+      action: 'admin.login_failed',
+      actorType: ActorType.ADMIN,
+      actorId: admin.id,
+      actorLabel: admin.address,
+      metadata: { reason: 'Inactive admin' },
+    });
     return { success: false, reason: 'Not an admin' } as const;
   }
 
   const accessToken = issueAdminAccessToken(admin.id, admin.address);
   const refreshToken = await issueAdminRefreshToken(admin.id);
 
-  // TODO: record an audit log entry for this successful login once recordAuditLog lands.
+  await recordAuditLog({
+    action: 'admin.login_succeeded',
+    actorType: ActorType.ADMIN,
+    actorId: admin.id,
+    actorLabel: admin.address,
+  });
+
   return {
     success: true,
     accessToken,

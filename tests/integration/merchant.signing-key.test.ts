@@ -99,6 +99,17 @@ describe('POST /api/v1/merchants/signing-key', () => {
     const updateArgs = prismaMock.merchant.updateMany.mock.calls[0][0];
     expect(updateArgs.data).toEqual({ merchantKey: response.body.publicKey });
     expect(JSON.stringify(updateArgs)).not.toContain(response.body.privateKey);
+
+    expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'merchant.signing_key_generated',
+        actorType: 'MERCHANT',
+        actorId: 'merchant-1',
+        metadata: { publicKey: response.body.publicKey },
+      }),
+    });
+    const auditArgs = prismaMock.adminLog.create.mock.calls[0][0];
+    expect(JSON.stringify(auditArgs)).not.toContain(response.body.privateKey);
   });
 });
 

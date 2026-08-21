@@ -64,6 +64,16 @@ describe('DepositAccountService', () => {
 
       // No horizon on-chain transactions submitted
       expect(mockHorizonServer.loadAccount).not.toHaveBeenCalled();
+
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'deposit_account.created',
+          actorType: 'SYSTEM',
+          actorLabel: 'system',
+          targetType: 'DepositAccount',
+          targetId: 'acc-uuid-1',
+        }),
+      });
     });
   });
 
@@ -200,6 +210,15 @@ describe('DepositAccountService', () => {
       expect(result.id).toBe('acc-1');
       expect(result.inUse).toBe(true);
       expect(result.invoiceId).toBe('inv-100');
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'deposit_account.assigned',
+          actorType: 'SYSTEM',
+          targetType: 'DepositAccount',
+          targetId: 'acc-1',
+          metadata: { invoiceId: 'inv-100' },
+        }),
+      });
     });
 
     it('handles race conditions by trying the next candidate if lost race', async () => {
@@ -276,6 +295,14 @@ describe('DepositAccountService', () => {
       });
       expect(result.inUse).toBe(false);
       expect(result.invoiceId).toBeNull();
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'deposit_account.released',
+          actorType: 'SYSTEM',
+          targetType: 'DepositAccount',
+          targetId: 'acc-1',
+        }),
+      });
     });
 
     it('throws 404 if account does not exist', async () => {

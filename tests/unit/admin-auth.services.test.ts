@@ -129,6 +129,14 @@ describe('Admin Auth Services', () => {
         });
       }
       expect(prismaMock.admin.findUnique).toHaveBeenCalledWith({ where: { address } });
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'admin.login_succeeded',
+          actorType: 'ADMIN',
+          actorId: 'admin-uuid',
+          actorLabel: address,
+        }),
+      });
     });
 
     test('should fail without creating an Admin row when no Admin exists for the address', async () => {
@@ -143,6 +151,14 @@ describe('Admin Auth Services', () => {
         expect(result.reason).toBe('Not an admin');
       }
       expect(prismaMock.admin.create).not.toHaveBeenCalled();
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'admin.login_failed',
+          actorType: 'ANONYMOUS',
+          actorId: null,
+          actorLabel: address,
+        }),
+      });
     });
 
     test('should fail for a deactivated admin', async () => {
@@ -164,6 +180,15 @@ describe('Admin Auth Services', () => {
         expect(result.reason).toBe('Not an admin');
       }
       expect(prismaMock.admin.create).not.toHaveBeenCalled();
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'admin.login_failed',
+          actorType: 'ADMIN',
+          actorId: 'admin-uuid',
+          actorLabel: address,
+          metadata: { reason: 'Inactive admin' },
+        }),
+      });
     });
 
     test('should fail without querying Admin when the signature is invalid', async () => {
@@ -177,6 +202,13 @@ describe('Admin Auth Services', () => {
         expect(result.reason).toBe('Signature verification failed');
       }
       expect(prismaMock.admin.findUnique).not.toHaveBeenCalled();
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'admin.login_failed',
+          actorType: 'ANONYMOUS',
+          actorLabel: address,
+        }),
+      });
     });
   });
 });
