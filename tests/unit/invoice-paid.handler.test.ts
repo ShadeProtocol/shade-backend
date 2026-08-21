@@ -30,7 +30,8 @@ describe('InvoicePaid indexer handler', () => {
   });
 
   test('registers the contract event symbol used by InvoicePaidEvent', async () => {
-    expect(INVOICE_PAID_TOPIC).toBe('InvoicePaid');
+    // #[contractevent] publishes the struct name in lower snake case.
+    expect(INVOICE_PAID_TOPIC).toBe('invoice_paid_event');
     await expect(
       dispatch({
         id: 'invoice-paid-invalid-payload',
