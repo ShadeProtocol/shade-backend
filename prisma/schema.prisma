@@ -8,10 +8,23 @@ datasource db {
 
 // Retained: admin-level access control is a separate auth concern handled outside merchant flows.
 model Admin {
+  id           String   @id @default(uuid())
+  address      String   @unique
+  active       Boolean  @default(true)
+  isSuperAdmin Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  refreshTokens AdminRefreshToken[]
+}
+
+model AdminRefreshToken {
   id        String   @id @default(uuid())
-  address   String   @unique
+  adminId   String
+  admin     Admin    @relation(fields: [adminId], references: [id])
+  token     String   @unique
+  expiresAt DateTime
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
 model Merchant {
