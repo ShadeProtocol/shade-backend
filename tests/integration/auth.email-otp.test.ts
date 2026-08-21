@@ -115,6 +115,15 @@ describe('Email OTP auth routes', () => {
           emailOtpExpiresAt: null,
         },
       });
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'merchant.email_verified',
+          actorType: 'MERCHANT',
+          actorId: 'uuid-1',
+          targetType: 'Merchant',
+          targetId: 'uuid-1',
+        }),
+      });
     });
 
     test('returns 400 for wrong code', async () => {
@@ -195,6 +204,13 @@ describe('Email OTP auth routes', () => {
           emailOtp: expect.any(String),
           emailOtpExpiresAt: expect.any(Date),
         },
+      });
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'merchant.otp_resent',
+          actorType: 'MERCHANT',
+          actorId: 'uuid-1',
+        }),
       });
     });
 

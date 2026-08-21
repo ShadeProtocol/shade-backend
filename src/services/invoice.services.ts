@@ -9,6 +9,7 @@ import {
   parseAmount,
 } from '../utils/invoice.validation.js';
 import type { InvoicePaidEventData } from '../indexer/types.js';
+import { recordAuditLog, ActorType } from './audit-log.services.js';
 
 const SLUG_MAX_RETRIES = 5;
 const INVOICE_DESCRIPTION_MAX_LENGTH = 100;
@@ -279,7 +280,7 @@ export const applyInvoicePayment = async (event: InvoicePaidEventData, txHash: s
   const paidAt = new Date(event.timestamp * 1000);
   const description = `Invoice #${event.invoiceId} payment${txHash ? ` (${txHash})` : ''}`;
 
-  return prisma.$transaction(async (tx: any) => {
+  const result = await prisma.$transaction(async (tx: any) => {
     const transactionInvoice = await tx.invoice.findUniqueOrThrow({
       where: { invoiceId: event.invoiceId },
     });
@@ -311,4 +312,21 @@ export const applyInvoicePayment = async (event: InvoicePaidEventData, txHash: s
 
     return { invoice: updatedInvoice, transaction };
   });
+
+  await recordAuditLog({
+    action: 'invoice.paid',
+    actorType: ActorType.ANONYMOUS,
+    actorLabel: event.payer,
+    targetType: 'Invoice',
+    targetId: result.invoice.id,
+    metadata: {
+      amount: event.amount.toString(),
+      fee: event.fee.toString(),
+      merchantAmount: event.merchantAmount.toString(),
+      token: event.token,
+      txHash,
+    },
+  });
+
+  return result;
 };
