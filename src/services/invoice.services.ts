@@ -8,7 +8,12 @@ import {
   InvoicePagination,
   parseAmount,
 } from '../utils/invoice.validation.js';
-import type { InvoicePaidEventData } from '../indexer/types.js';
+import type {
+  InvoicePaidEventData,
+  InvoicePartiallyRefundedEventData,
+  InvoiceRefundedEventData,
+} from '../indexer/types.js';
+import { recordVolumeEvent } from './analytics.services.js';
 
 const SLUG_MAX_RETRIES = 5;
 const INVOICE_DESCRIPTION_MAX_LENGTH = 100;
@@ -22,6 +27,8 @@ const InvoiceStatus = {
   PAID: 'PAID',
   PARTIALLY_PAID: 'PARTIALLY_PAID',
   CANCELLED: 'CANCELLED',
+  REFUNDED: 'REFUNDED',
+  PARTIALLY_REFUNDED: 'PARTIALLY_REFUNDED',
 } as const satisfies Record<string, PrismaInvoiceStatus>;
 
 const TransactionType = {
@@ -309,6 +316,63 @@ export const applyInvoicePayment = async (event: InvoicePaidEventData, txHash: s
       },
     });
 
+    await recordVolumeEvent(tx, {
+      merchantId: merchant.id,
+      token: event.token,
+      // The contract feeds its own analytics the gross amount and the fee taken
+      // out of it, so the projection mirrors that rather than merchantAmount.
+      volume: event.amount,
+      fee: event.fee,
+      occurredAt: paidAt,
+    });
+
     return { invoice: updatedInvoice, transaction };
+  });
+};
+
+/**
+ * Applies a confirmed on-chain refund to the backend projection.
+ *
+ * Refunds deliberately do not touch MerchantAnalytics/TokenAnalytics/
+ * PlatformDailyStats: the contract's `record_merchant_payment` is only reached
+ * from the payment paths (invoice payment, subscription charge, ticket sale)
+ * and never from `refund_invoice`/`refund_invoice_partial`, so on-chain
+ * `total_volume` is not reduced by a refund. Refund totals are read back
+ * separately from `Invoice.amountRefunded`.
+ */
+export const applyInvoiceRefund = async (
+  event: InvoiceRefundedEventData | InvoicePartiallyRefundedEventData,
+  txHash: string,
+) => {
+  const invoice = await prisma.invoice.findUnique({
+    where: { invoiceId: event.invoiceId },
+  });
+
+  if (!invoice) {
+    console.warn(
+      `Refund event for invoice ${event.invoiceId} (${txHash}) skipped: invoice is not in the database.`,
+    );
+    return null;
+  }
+
+  return prisma.$transaction(async (tx: any) => {
+    const current = await tx.invoice.findUniqueOrThrow({
+      where: { invoiceId: event.invoiceId },
+    });
+
+    // The partial-refund event carries the running total; the full-refund event
+    // only carries the chunk just refunded, so that one accumulates.
+    const amountRefunded =
+      'totalAmountRefunded' in event
+        ? event.totalAmountRefunded
+        : current.amountRefunded + event.amount;
+
+    const status: PrismaInvoiceStatus =
+      amountRefunded >= current.amount ? InvoiceStatus.REFUNDED : InvoiceStatus.PARTIALLY_REFUNDED;
+
+    return tx.invoice.update({
+      where: { id: current.id },
+      data: { amountRefunded, status },
+    });
   });
 };
