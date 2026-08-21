@@ -85,6 +85,7 @@ export async function tick(): Promise<void> {
           topic: decodedTopic,
           ledger: event.ledger,
           txHash: event.txHash,
+          ledgerClosedAt: event.ledgerClosedAt,
           data: decodedValue,
         });
 

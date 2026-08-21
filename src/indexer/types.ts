@@ -3,6 +3,12 @@ export interface DecodedEvent {
   topic: string;
   ledger: number;
   txHash: string;
+  /**
+   * ISO close time of the event's ledger, as reported by `getEvents`. Handlers
+   * for events the contract emits without their own timestamp field use this,
+   * so a historical replay buckets by when the event actually happened.
+   */
+  ledgerClosedAt?: string;
   data: any;
 }
 

@@ -39,7 +39,13 @@ export const applySubscriptionCharge = async (
   return prisma.$transaction(async (tx: any) => {
     const updatedSubscription = await tx.subscription.update({
       where: { id: subscription.id },
-      data: { lastCharged: chargedAt },
+      data: {
+        // A replayed or out-of-order charge must not walk lastCharged backwards.
+        lastCharged:
+          subscription.lastCharged && subscription.lastCharged > chargedAt
+            ? subscription.lastCharged
+            : chargedAt,
+      },
     });
 
     const transaction = await tx.transaction.create({

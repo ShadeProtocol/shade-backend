@@ -125,11 +125,7 @@ describe('getAnalyticsSummary', () => {
       _sum: { totalVolume: 5_000_000n, totalFees: 50_000n, transactionCount: 7n },
       _count: { _all: 2 },
     });
-    prismaMock.merchantAnalytics.groupBy.mockResolvedValue([
-      { merchantId: 'm-1' },
-      { merchantId: 'm-2' },
-      { merchantId: 'm-3' },
-    ]);
+    prismaMock.$queryRaw.mockResolvedValue([{ count: 3 }]);
     prismaMock.invoice.aggregate.mockResolvedValue({ _sum: { amountRefunded: 250_000n } });
     prismaMock.merchant.count
       .mockResolvedValueOnce(10)
@@ -169,7 +165,7 @@ describe('getAnalyticsSummary', () => {
       _sum: { totalVolume: null, totalFees: null, transactionCount: null },
       _count: { _all: 0 },
     });
-    prismaMock.merchantAnalytics.groupBy.mockResolvedValue([]);
+    prismaMock.$queryRaw.mockResolvedValue([{ count: 0 }]);
     prismaMock.invoice.aggregate.mockResolvedValue({ _sum: { amountRefunded: null } });
     prismaMock.merchant.count.mockResolvedValue(0);
     prismaMock.invoice.groupBy.mockResolvedValue([]);
@@ -316,6 +312,7 @@ describe('getTopTokensByVolume', () => {
       totalFees: '90000',
       transactionCount: '12',
       uniqueMerchants: 2,
+      lastUpdated: '2026-08-21T10:00:00.000Z',
     });
   });
 });

@@ -32,7 +32,7 @@ const stubSummaryQueries = () => {
     _sum: { totalVolume: 5_000_000n, totalFees: 50_000n, transactionCount: 7n },
     _count: { _all: 2 },
   });
-  prismaMock.merchantAnalytics.groupBy.mockResolvedValue([{ merchantId: 'm-1' }]);
+  prismaMock.$queryRaw.mockResolvedValue([{ count: 1 }]);
   prismaMock.invoice.aggregate.mockResolvedValue({ _sum: { amountRefunded: 0n } });
   prismaMock.merchant.count.mockResolvedValue(4);
   prismaMock.invoice.groupBy.mockResolvedValue([{ status: 'PAID', _count: { _all: 6 } }]);

@@ -7,6 +7,16 @@ import {
   type DecodedEvent,
 } from '../types.js';
 
+/**
+ * Falls back to the indexing time only if the RPC response carried no ledger
+ * close time — every real `getEvents` response does.
+ */
+const ledgerCloseTime = (event: DecodedEvent): Date => {
+  if (!event.ledgerClosedAt) return new Date();
+  const closedAt = new Date(event.ledgerClosedAt);
+  return Number.isNaN(closedAt.getTime()) ? new Date() : closedAt;
+};
+
 export const MERCHANT_REGISTERED_TOPIC = 'merchant_registered_event';
 export const INVOICE_CREATED_TOPIC = 'invoice_created_event';
 export const SUBSCRIBED_TOPIC = 'subscribed_event';
@@ -24,11 +34,11 @@ export const handleMerchantRegistered = async (event: DecodedEvent): Promise<voi
 
 export const handleInvoiceCreated = async (event: DecodedEvent): Promise<void> => {
   // `InvoiceCreatedEvent` is the one growth event the contract emits without a
-  // timestamp field, so the day is taken from when the indexer sees it. The
-  // indexer runs a few ledgers behind at most, so the two only differ for an
-  // event created within seconds of UTC midnight.
+  // timestamp field, so the day comes from the close time of the ledger that
+  // contained it. Using the indexing time instead would bucket a historical
+  // replay into whatever day the replay happened to run.
   decodeInvoiceCreatedEventData(event.data);
-  await recordDailyStats(prisma, new Date(), { newInvoices: 1 });
+  await recordDailyStats(prisma, ledgerCloseTime(event), { newInvoices: 1 });
 };
 
 export const handleSubscribed = async (event: DecodedEvent): Promise<void> => {

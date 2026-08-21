@@ -330,6 +330,12 @@ export const applyInvoicePayment = async (event: InvoicePaidEventData, txHash: s
   });
 };
 
+const clampRefund = (reported: bigint, alreadyRefunded: bigint, invoiceAmount: bigint): bigint => {
+  if (reported > invoiceAmount) return invoiceAmount;
+  if (reported < alreadyRefunded) return alreadyRefunded;
+  return reported;
+};
+
 /**
  * Applies a confirmed on-chain refund to the backend projection.
  *
@@ -360,12 +366,18 @@ export const applyInvoiceRefund = async (
       where: { invoiceId: event.invoiceId },
     });
 
-    // The partial-refund event carries the running total; the full-refund event
-    // only carries the chunk just refunded, so that one accumulates.
-    const amountRefunded =
-      'totalAmountRefunded' in event
-        ? event.totalAmountRefunded
-        : current.amountRefunded + event.amount;
+    // Both refund events report an absolute total, never an increment: the
+    // partial event carries `total_amount_refunded`, and the full event's
+    // `amount` is the invoice's whole amount — `refund_invoice` and the
+    // completing branch of `refund_invoice_partial` both pass `invoice.amount`,
+    // not the chunk just refunded.
+    const reportedRefund =
+      'totalAmountRefunded' in event ? event.totalAmountRefunded : event.amount;
+
+    // Clamped to the invoice total and never allowed to move backwards, so a
+    // replayed or out-of-order refund event cannot skew the refund total that
+    // /admin/analytics/summary reports.
+    const amountRefunded = clampRefund(reportedRefund, current.amountRefunded, current.amount);
 
     const status: PrismaInvoiceStatus =
       amountRefunded >= current.amount ? InvoiceStatus.REFUNDED : InvoiceStatus.PARTIALLY_REFUNDED;

@@ -171,7 +171,13 @@ export const getAnalyticsSummary = async () => {
       _sum: { totalVolume: true, totalFees: true, transactionCount: true },
       _count: { _all: true },
     }),
-    prisma.merchantAnalytics.groupBy({ by: ['merchantId'] }),
+    // Prisma's typed API has no scalar COUNT(DISTINCT ...), and groupBy would
+    // stream back one row per merchant just to be counted. Same convention as
+    // the advisory lock in auth.services.ts: drop to raw SQL where the typed
+    // API cannot express the query.
+    prisma.$queryRaw<{ count: number }[]>`
+      SELECT COUNT(DISTINCT "merchantId")::int AS count FROM "MerchantAnalytics"
+    `,
     prisma.invoice.aggregate({ _sum: { amountRefunded: true } }),
     prisma.merchant.count(),
     prisma.merchant.count({ where: { active: true } }),
@@ -190,7 +196,7 @@ export const getAnalyticsSummary = async () => {
       transactionCount: toStringAmount(tokenTotals._sum?.transactionCount),
       totalRefunded: toStringAmount(refundTotals._sum?.amountRefunded),
       tokens: tokenTotals._count?._all ?? 0,
-      merchantsWithVolume: merchantsWithVolume.length,
+      merchantsWithVolume: merchantsWithVolume[0]?.count ?? 0,
     },
     merchants: {
       total: merchantCount,
@@ -289,7 +295,7 @@ export const getTopTokensByVolume = async (query: Record<string, unknown>) => {
       totalFees: token.totalFees.toString(),
       transactionCount: token.transactionCount.toString(),
       uniqueMerchants: token.uniqueMerchants,
-      lastUpdated: token.lastUpdated,
+      lastUpdated: token.lastUpdated.toISOString(),
     })),
   };
 };

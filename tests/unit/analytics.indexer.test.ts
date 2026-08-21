@@ -19,7 +19,7 @@ await import('../../src/indexer/handlers/index.js');
 
 const MERCHANT_UUID = 'merchant-uuid';
 const TOKEN = 'CABC...TOKEN';
-const TIMESTAMP = 1_787_318_100; // 2026-08-21T09:15:00Z
+const TIMESTAMP = 1_787_318_100; // 2026-08-21T13:15:00Z
 const OCCURRED_AT = new Date(TIMESTAMP * 1000);
 const DAY = new Date('2026-08-21T00:00:00.000Z');
 
@@ -336,12 +336,14 @@ describe('refund handlers', () => {
     });
   });
 
-  test('a full refund accumulates onto what was already refunded', async () => {
+  test('a full refund takes the whole invoice amount the event reports', async () => {
+    // Both refund_invoice and the completing branch of refund_invoice_partial
+    // publish invoice.amount here, not the chunk just refunded.
     await applyInvoiceRefund(
       {
         invoiceId: 101,
         merchant: 'GMERCHANT',
-        amount: 4000n,
+        amount: 5000n,
         timestamp: TIMESTAMP,
       },
       'tx-hash',
@@ -353,9 +355,46 @@ describe('refund handlers', () => {
     });
   });
 
+  test('clamps a refund total that would exceed the invoice amount', async () => {
+    await applyInvoiceRefund(
+      decodeInvoicePartiallyRefundedEventData({
+        invoice_id: 101n,
+        merchant: 'GMERCHANT',
+        amount: 9000n,
+        total_amount_refunded: 9000n,
+        timestamp: BigInt(TIMESTAMP),
+      }),
+      'tx-hash',
+    );
+
+    expect(prismaMock.invoice.update).toHaveBeenCalledWith({
+      where: { id: invoice.id },
+      data: { amountRefunded: 5000n, status: 'REFUNDED' },
+    });
+  });
+
+  test('never walks the refund total backwards on a replayed event', async () => {
+    // 1000n is already refunded; replaying an earlier partial must not undo it.
+    await applyInvoiceRefund(
+      decodeInvoicePartiallyRefundedEventData({
+        invoice_id: 101n,
+        merchant: 'GMERCHANT',
+        amount: 500n,
+        total_amount_refunded: 500n,
+        timestamp: BigInt(TIMESTAMP),
+      }),
+      'tx-hash',
+    );
+
+    expect(prismaMock.invoice.update).toHaveBeenCalledWith({
+      where: { id: invoice.id },
+      data: { amountRefunded: 1000n, status: 'PARTIALLY_REFUNDED' },
+    });
+  });
+
   test('never nets a refund off the volume projections', async () => {
     await applyInvoiceRefund(
-      { invoiceId: 101, merchant: 'GMERCHANT', amount: 4000n, timestamp: TIMESTAMP },
+      { invoiceId: 101, merchant: 'GMERCHANT', amount: 5000n, timestamp: TIMESTAMP },
       'tx-hash',
     );
 
@@ -369,7 +408,7 @@ describe('refund handlers', () => {
 
     expect(
       await applyInvoiceRefund(
-        { invoiceId: 101, merchant: 'GMERCHANT', amount: 4000n, timestamp: TIMESTAMP },
+        { invoiceId: 101, merchant: 'GMERCHANT', amount: 5000n, timestamp: TIMESTAMP },
         'tx-hash',
       ),
     ).toBeNull();
@@ -411,20 +450,31 @@ describe('growth handlers', () => {
   });
 
   describe('invoice creation', () => {
+    const invoiceCreatedData = {
+      invoice_id: 101n,
+      merchant: 'GMERCHANT',
+      amount: 5000n,
+      token: TOKEN,
+    };
+
     beforeEach(() => {
-      jest.useFakeTimers({ now: new Date('2026-08-21T23:59:00.000Z') });
+      // A replay running on a much later day: the indexing time is the wrong
+      // bucket, so only the ledger close time can put the event on 2026-08-21.
+      jest.useFakeTimers({ now: new Date('2027-03-04T10:00:00.000Z') });
     });
 
     afterEach(() => {
       jest.useRealTimers();
     });
 
-    test('falls back to the indexing time, since the event carries no timestamp', async () => {
-      await dispatchGrowth('invoice_created_event', {
-        invoice_id: 101n,
-        merchant: 'GMERCHANT',
-        amount: 5000n,
-        token: TOKEN,
+    test('buckets by ledger close time, since the event carries no timestamp', async () => {
+      await dispatch({
+        id: 'invoice-created-1',
+        topic: 'invoice_created_event',
+        ledger: 1,
+        txHash: 'tx-hash',
+        ledgerClosedAt: '2026-08-21T13:15:00Z',
+        data: invoiceCreatedData,
       });
 
       expect(prismaMock.platformDailyStats.upsert).toHaveBeenCalledWith({
@@ -432,6 +482,14 @@ describe('growth handlers', () => {
         create: { date: DAY, newInvoices: 1 },
         update: { newInvoices: { increment: 1 } },
       });
+    });
+
+    test('falls back to the indexing time when no ledger close time is present', async () => {
+      await dispatchGrowth('invoice_created_event', invoiceCreatedData);
+
+      expect(prismaMock.platformDailyStats.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { date: new Date('2027-03-04T00:00:00.000Z') } }),
+      );
     });
   });
 
@@ -442,5 +500,61 @@ describe('growth handlers', () => {
     await dispatchGrowth('event_created_event', { event_id: 3n });
 
     expect(prismaMock.platformDailyStats.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('topic registration', () => {
+  const dispatchTopic = (topic: string, data: Record<string, unknown>) =>
+    dispatch({ id: `${topic}-1`, topic, ledger: 1, txHash: 'tx-hash', data });
+
+  const ticketData = {
+    ticket_id: 9n,
+    event_id: 3n,
+    merchant_id: 7n,
+    buyer: 'GBUYER',
+    amount: 4000n,
+    fee: 40n,
+    merchant_amount: 3960n,
+    token: TOKEN,
+    timestamp: BigInt(TIMESTAMP),
+  };
+
+  const resaleData = {
+    ...ticketData,
+    seller: 'GSELLER',
+    resale_price: 6000n,
+    royalty: 300n,
+    seller_proceeds: 5700n,
+  };
+
+  const refundData = {
+    invoice_id: 101n,
+    merchant: 'GMERCHANT',
+    amount: 5000n,
+    timestamp: BigInt(TIMESTAMP),
+  };
+
+  // Each handler is reached only if its topic string matches what the contract
+  // actually publishes, so these guard against a topic typo going unnoticed.
+  test.each([
+    ['ticket_purchased_event', ticketData],
+    ['ticket_resold_event', resaleData],
+  ])('%s reaches the ticketing handler', async (topic, data) => {
+    prismaMock.merchant.findUnique.mockResolvedValue(null);
+
+    await dispatchTopic(topic, data);
+
+    expect(prismaMock.merchant.findUnique).toHaveBeenCalledWith({ where: { merchantId: 7 } });
+  });
+
+  test.each([
+    ['invoice_refunded_event', refundData],
+    ['invoice_partially_refunded_event', { ...refundData, total_amount_refunded: 5000n }],
+  ])('%s reaches the refund handler', async (topic, data) => {
+    prismaMock.invoice.findUnique.mockResolvedValue(null);
+
+    await dispatchTopic(topic, data);
+
+    expect(prismaMock.invoice.findUnique).toHaveBeenCalledWith({ where: { invoiceId: 101 } });
   });
 });
