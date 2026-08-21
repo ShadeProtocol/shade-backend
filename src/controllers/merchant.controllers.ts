@@ -10,6 +10,7 @@ import {
 } from '../services/merchant.services.js';
 import { validateRegisterMerchant, validateUpdateMerchant } from '../utils/validation.js';
 import { AppError } from '../utils/errors.js';
+import { recordAuditLog, ActorType } from '../services/audit-log.services.js';
 
 export const createMerchantController = async (req: Request, res: Response) => {
   try {
@@ -54,6 +55,14 @@ export const registerMerchantController = async (req: Request, res: Response): P
 
   try {
     const profile = await registerMerchant(merchant.id, req.body);
+    await recordAuditLog({
+      action: 'merchant.profile_registered',
+      actorType: ActorType.MERCHANT,
+      actorId: profile.id,
+      actorLabel: profile.businessName ?? profile.address,
+      targetType: 'Merchant',
+      targetId: profile.id,
+    });
     res.status(200).json(profile);
   } catch (error) {
     if (error instanceof AppError) {
@@ -94,6 +103,15 @@ export const generateSigningKeyController = async (req: Request, res: Response):
 
   try {
     const keys = await generateMerchantSigningKey(merchant.id);
+    await recordAuditLog({
+      action: 'merchant.signing_key_generated',
+      actorType: ActorType.MERCHANT,
+      actorId: merchant.id,
+      actorLabel: merchant.businessName ?? merchant.address,
+      targetType: 'Merchant',
+      targetId: merchant.id,
+      metadata: { publicKey: keys.publicKey },
+    });
     res.status(201).json(keys);
   } catch (error) {
     if (error instanceof AppError) {
@@ -120,6 +138,14 @@ export const updateMyProfileController = async (req: Request, res: Response): Pr
 
   try {
     const profile = await updateMyProfile(merchant.id, req.body);
+    await recordAuditLog({
+      action: 'merchant.profile_updated',
+      actorType: ActorType.MERCHANT,
+      actorId: profile.id,
+      actorLabel: profile.businessName ?? profile.address,
+      targetType: 'Merchant',
+      targetId: profile.id,
+    });
     res.status(200).json(profile);
   } catch (error) {
     if (error instanceof AppError) {

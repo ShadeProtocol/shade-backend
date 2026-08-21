@@ -4,6 +4,7 @@ import { createNonce, authenticateWallet } from '../services/auth.services.js';
 import { resendEmailOtp, verifyEmailOtp } from '../services/otp.services.js';
 import { sanitizeMerchant } from '../services/merchant.services.js';
 import { AppError } from '../utils/errors.js';
+import { recordAuditLog, ActorType } from '../services/audit-log.services.js';
 
 export const createNonceController = async (req: Request, res: Response) => {
   try {
@@ -85,6 +86,14 @@ export const verifyEmailController = async (req: Request, res: Response): Promis
 
   try {
     const updatedMerchant = await verifyEmailOtp(merchant.id, code.trim());
+    await recordAuditLog({
+      action: 'merchant.email_verified',
+      actorType: ActorType.MERCHANT,
+      actorId: merchant.id,
+      actorLabel: merchant.businessName ?? merchant.address,
+      targetType: 'Merchant',
+      targetId: merchant.id,
+    });
     res.status(200).json(sanitizeMerchant(updatedMerchant));
   } catch (error) {
     if (error instanceof AppError) {
@@ -105,6 +114,14 @@ export const resendOtpController = async (req: Request, res: Response): Promise<
 
   try {
     await resendEmailOtp(merchant.id);
+    await recordAuditLog({
+      action: 'merchant.otp_resent',
+      actorType: ActorType.MERCHANT,
+      actorId: merchant.id,
+      actorLabel: merchant.businessName ?? merchant.address,
+      targetType: 'Merchant',
+      targetId: merchant.id,
+    });
     res.status(200).json({ message: 'Verification code sent' });
   } catch (error) {
     if (error instanceof AppError) {

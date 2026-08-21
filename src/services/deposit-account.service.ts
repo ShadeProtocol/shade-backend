@@ -3,6 +3,7 @@ import type { DepositAccount } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { encrypt } from '../utils/encryption.js';
 import { AppError } from '../utils/errors.js';
+import { recordAuditLog, ActorType } from './audit-log.services.js';
 
 export interface DepositAccountSummary {
   id: string;
@@ -40,6 +41,14 @@ export class DepositAccountService {
         inUse: false,
         invoiceId: null,
       },
+    });
+
+    await recordAuditLog({
+      action: 'deposit_account.created',
+      actorType: ActorType.SYSTEM,
+      actorLabel: 'system',
+      targetType: 'DepositAccount',
+      targetId: account.id,
     });
 
     return sanitizeDepositAccount(account);
@@ -106,6 +115,14 @@ export class DepositAccountService {
             const updated = await prisma.depositAccount.findUnique({
               where: { id: candidate.id },
             });
+            await recordAuditLog({
+              action: 'deposit_account.assigned',
+              actorType: ActorType.SYSTEM,
+              actorLabel: 'system',
+              targetType: 'DepositAccount',
+              targetId: candidate.id,
+              metadata: { invoiceId },
+            });
             return sanitizeDepositAccount(updated!);
           }
         } catch (error: unknown) {
@@ -135,6 +152,14 @@ export class DepositAccountService {
         inUse: false,
         lastUsedAt: new Date(),
       },
+    });
+
+    await recordAuditLog({
+      action: 'deposit_account.released',
+      actorType: ActorType.SYSTEM,
+      actorLabel: 'system',
+      targetType: 'DepositAccount',
+      targetId: accountId,
     });
 
     return sanitizeDepositAccount(updated);

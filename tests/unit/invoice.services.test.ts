@@ -269,6 +269,16 @@ describe('invoice services', () => {
           date: new Date(paymentEvent.timestamp * 1000),
         }),
       });
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'invoice.paid',
+          actorType: 'ANONYMOUS',
+          actorId: null,
+          actorLabel: paymentEvent.payer,
+          targetType: 'Invoice',
+          targetId: baseInvoice.id,
+        }),
+      });
     });
 
     test('marks the invoice PAID and sets datePaid when the payment completes it', async () => {
@@ -311,6 +321,7 @@ describe('invoice services', () => {
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('invoice is not in the database'));
       expect(prismaMock.merchant.findUnique).not.toHaveBeenCalled();
       expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.adminLog.create).not.toHaveBeenCalled();
       warn.mockRestore();
     });
   });

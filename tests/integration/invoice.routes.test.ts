@@ -99,6 +99,15 @@ describe('Invoice routes', () => {
       expect(response.body.status).toBe('PENDING');
       expect(response.body.amount).toBe('5000');
       expect(response.body.paymentSlug).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'invoice.created',
+          actorType: 'MERCHANT',
+          actorId: MERCHANT_ID,
+          targetType: 'Invoice',
+          targetId: response.body.id,
+        }),
+      });
     });
 
     test('creates a DRAFT invoice when isDraft is true', async () => {
@@ -205,6 +214,15 @@ describe('Invoice routes', () => {
       expect(response.body.email).toBe('payer@example.com');
       expect(response.body.amount).toBe('2000');
       expect(response.body.description).toBe('Updated website design');
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'invoice.amended',
+          actorType: 'MERCHANT',
+          actorId: MERCHANT_ID,
+          targetType: 'Invoice',
+          targetId: 'invoice-1',
+        }),
+      });
     });
 
     test('returns 400 when amending a non-PENDING invoice', async () => {
@@ -262,6 +280,33 @@ describe('Invoice routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('CANCELLED');
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'invoice.voided',
+          actorType: 'MERCHANT',
+          actorId: MERCHANT_ID,
+          targetType: 'Invoice',
+          targetId: 'invoice-1',
+        }),
+      });
+    });
+
+    test('still voids the invoice and returns 200 when the audit log write fails', async () => {
+      authenticate();
+      prismaMock.invoice.findFirst.mockResolvedValue(baseInvoice as any);
+      prismaMock.invoice.update.mockResolvedValue({
+        ...baseInvoice,
+        status: 'CANCELLED',
+      } as any);
+      prismaMock.adminLog.create.mockRejectedValue(new Error('connection reset'));
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      const response = await request(app).patch('/api/v1/invoices/invoice-1/void').set(auth);
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('CANCELLED');
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
     });
 
     test('returns 400 when voiding a non-PENDING invoice', async () => {
@@ -355,6 +400,15 @@ describe('Invoice routes', () => {
 
       expect(response.status).toBe(200);
       expect(sendInvoiceEmailMock).toHaveBeenCalledWith(invoiceWithEmail, merchant);
+      expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'invoice.email_sent',
+          actorType: 'MERCHANT',
+          actorId: MERCHANT_ID,
+          targetType: 'Invoice',
+          targetId: 'invoice-1',
+        }),
+      });
     });
   });
 });

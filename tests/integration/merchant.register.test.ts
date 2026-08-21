@@ -119,6 +119,16 @@ describe('POST /api/v1/merchants/register', () => {
       registered: true,
     });
     expect(sendOtpMock).toHaveBeenCalledWith('ada@example.com', '123456', 'Ada');
+    expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'merchant.profile_registered',
+        actorType: 'MERCHANT',
+        actorId: 'uuid-1',
+        actorLabel: 'Analytical Engines',
+        targetType: 'Merchant',
+        targetId: 'uuid-1',
+      }),
+    });
   });
 
   test('returns 409 when the email is already registered', async () => {

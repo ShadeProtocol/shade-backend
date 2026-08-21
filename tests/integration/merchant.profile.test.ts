@@ -88,6 +88,15 @@ describe('PATCH /api/v1/merchants/me', () => {
       firstName: 'Grace',
       webhook: 'https://example.com/hook',
     });
+    expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'merchant.profile_updated',
+        actorType: 'MERCHANT',
+        actorId: 'uuid-1',
+        targetType: 'Merchant',
+        targetId: 'uuid-1',
+      }),
+    });
   });
 
   test('silently ignores non-editable fields (address/email/merchantId/account)', async () => {
