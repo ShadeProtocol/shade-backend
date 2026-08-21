@@ -37,12 +37,23 @@ export async function authenticateAdminWallet(address: string, nonce: string, si
   }
 
   const admin = await prisma.admin.findUnique({ where: { address } });
-  if (!admin || !admin.active) {
+  if (!admin) {
     await recordAuditLog({
       action: 'admin.login_failed',
       actorType: ActorType.ANONYMOUS,
       actorLabel: address,
       metadata: { reason: 'Not an admin' },
+    });
+    return { success: false, reason: 'Not an admin' } as const;
+  }
+
+  if (!admin.active) {
+    await recordAuditLog({
+      action: 'admin.login_failed',
+      actorType: ActorType.ADMIN,
+      actorId: admin.id,
+      actorLabel: admin.address,
+      metadata: { reason: 'Inactive admin' },
     });
     return { success: false, reason: 'Not an admin' } as const;
   }

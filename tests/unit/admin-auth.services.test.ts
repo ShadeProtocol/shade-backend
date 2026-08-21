@@ -183,8 +183,10 @@ describe('Admin Auth Services', () => {
       expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           action: 'admin.login_failed',
-          actorType: 'ANONYMOUS',
+          actorType: 'ADMIN',
+          actorId: 'admin-uuid',
           actorLabel: address,
+          metadata: { reason: 'Inactive admin' },
         }),
       });
     });

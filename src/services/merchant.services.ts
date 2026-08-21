@@ -185,13 +185,6 @@ export const generateMerchantSigningKey = async (id: string) => {
 };
 
 /**
- * Partially updates the authenticated merchant's editable profile fields.
- *
- * Only fields present in `data` are written. Strings are trimmed; an empty
- * `logo`/`webhook` is normalized to null so the merchant can clear them.
- * Non-editable fields are never read here, so they cannot be changed.
- */
-/**
  * Deactivates a merchant (admin action). Sets Merchant.active = false only;
  * this does not currently gate login, invoice creation, or any other flow.
  */
@@ -210,6 +203,13 @@ export const blockMerchant = async (id: string) => {
   return sanitizeMerchant(updated);
 };
 
+/**
+ * Partially updates the authenticated merchant's editable profile fields.
+ *
+ * Only fields present in `data` are written. Strings are trimmed; an empty
+ * `logo`/`webhook` is normalized to null so the merchant can clear them.
+ * Non-editable fields are never read here, so they cannot be changed.
+ */
 export const updateMyProfile = async (id: string, data: UpdateMerchantInput) => {
   const updateData: Prisma.MerchantUpdateInput = {};
 

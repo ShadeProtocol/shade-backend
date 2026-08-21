@@ -85,7 +85,7 @@ describe('GET /api/v1/admin/logs', () => {
       where: {},
       take: 20,
       skip: 0,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
   });
 
@@ -120,7 +120,7 @@ describe('GET /api/v1/admin/logs', () => {
       },
       take: 5,
       skip: 10,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
   });
 

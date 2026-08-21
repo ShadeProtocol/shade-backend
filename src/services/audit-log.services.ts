@@ -95,7 +95,7 @@ export const listAuditLogs = async (filters: AuditLogFilters, pagination: AuditL
       where,
       take: pagination.limit,
       skip: pagination.offset,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     }),
     prisma.adminLog.count({ where }),
   ]);

@@ -142,7 +142,7 @@ describe('Audit Log Services', () => {
         },
         take: 10,
         skip: 5,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       expect(result).toEqual({
         data: [logRow],
@@ -160,7 +160,40 @@ describe('Audit Log Services', () => {
         where: {},
         take: 20,
         skip: 0,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+    });
+
+    test('orders by id as a tiebreaker so equal-createdAt rows paginate deterministically', async () => {
+      // Three rows share the same createdAt millisecond. The id tiebreaker is
+      // what keeps adjacent pages from skipping or repeating a row.
+      const sameInstant = mockDate;
+      const rowA = { ...logRow, id: 'log-a', createdAt: sameInstant };
+      const rowB = { ...logRow, id: 'log-b', createdAt: sameInstant };
+      const rowC = { ...logRow, id: 'log-c', createdAt: sameInstant };
+
+      prismaMock.adminLog.findMany.mockResolvedValueOnce([rowC, rowB]);
+      prismaMock.adminLog.count.mockResolvedValue(3);
+      const firstPage = await listAuditLogs({}, { limit: 2, offset: 0 });
+
+      prismaMock.adminLog.findMany.mockResolvedValueOnce([rowA]);
+      const secondPage = await listAuditLogs({}, { limit: 2, offset: 2 });
+
+      expect(firstPage.data.map(row => row.id)).toEqual(['log-c', 'log-b']);
+      expect(secondPage.data.map(row => row.id)).toEqual(['log-a']);
+      // Same DB call shape both times — the id tiebreaker, not offset alone,
+      // is what the database uses to keep the two pages disjoint.
+      expect(prismaMock.adminLog.findMany).toHaveBeenNthCalledWith(1, {
+        where: {},
+        take: 2,
+        skip: 0,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      expect(prismaMock.adminLog.findMany).toHaveBeenNthCalledWith(2, {
+        where: {},
+        take: 2,
+        skip: 2,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
     });
   });
