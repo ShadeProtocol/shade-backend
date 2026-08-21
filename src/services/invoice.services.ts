@@ -402,9 +402,7 @@ export const applyInvoiceCreated = async (
 
     return {
       invoice: created,
-      outcome: (candidates.length > 1 ? 'created-ambiguous' : 'created') as
-        | 'created'
-        | 'created-ambiguous',
+      outcome: (candidates.length > 1 ? 'created-ambiguous' : 'created') as 'created' | 'created-ambiguous',
     };
   });
 
