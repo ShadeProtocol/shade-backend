@@ -214,6 +214,63 @@ export const getAnalyticsSummary = async () => {
   };
 };
 
+/**
+ * Per-merchant analytics for the admin dashboard: current per-token totals from
+ * MerchantAnalytics, plus live status-grouped invoice and subscription counts.
+ * Mirrors the shape of getAnalyticsSummary, scoped to one merchant.
+ *
+ * `Subscription.merchantId` is a scalar column, so the subscription count is a
+ * direct `where` filter with no join.
+ */
+export const getMerchantAdminAnalytics = async (merchantId: string) => {
+  const merchant = await prisma.merchant.findUnique({
+    where: { id: merchantId },
+    select: { id: true },
+  });
+
+  if (!merchant) {
+    throw new AppError(404, 'Merchant not found');
+  }
+
+  const [tokenRows, invoicesByStatus, subscriptionsByStatus] = await Promise.all([
+    prisma.merchantAnalytics.findMany({
+      where: { merchantId },
+      orderBy: { totalVolume: 'desc' },
+    }),
+    prisma.invoice.groupBy({
+      by: ['status'],
+      where: { merchantId },
+      _count: { _all: true },
+    }),
+    prisma.subscription.groupBy({
+      by: ['status'],
+      where: { merchantId },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const invoiceCounts = countByKey(invoicesByStatus, group => group.status);
+  const subscriptionCounts = countByKey(subscriptionsByStatus, group => group.status);
+
+  return {
+    merchantId,
+    tokens: tokenRows.map(row => ({
+      token: row.token,
+      totalVolume: toStringAmount(row.totalVolume),
+      totalFees: toStringAmount(row.totalFees),
+      transactionCount: toStringAmount(row.transactionCount),
+    })),
+    invoices: {
+      total: sumCounts(invoiceCounts),
+      byStatus: invoiceCounts,
+    },
+    subscriptions: {
+      total: sumCounts(subscriptionCounts),
+      byStatus: subscriptionCounts,
+    },
+  };
+};
+
 const parseDateParam = (value: unknown, field: string): Date | null => {
   if (value === undefined || value === null || value === '') return null;
   if (typeof value !== 'string') {

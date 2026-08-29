@@ -2,8 +2,16 @@ import { Merchant, Prisma } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { AppError } from '../utils/errors.js';
 import { RegisterMerchantInput, UpdateMerchantInput } from '../utils/validation.js';
+import {
+  AdminMerchantListFilters,
+  AdminMerchantListPagination,
+  MerchantListSortBy,
+  MerchantListSortDir,
+} from '../utils/merchant.validation.js';
+import { InvoiceListFilters, InvoicePagination } from '../utils/invoice.validation.js';
 import { generateOtp, hashOtp } from './otp.services.js';
 import { sendOtp } from './email.service.js';
+import { listInvoices } from './invoice.services.js';
 import { Keypair } from '@stellar/stellar-sdk';
 
 const OTP_EXPIRY_MS = 10 * 60 * 1000;
@@ -185,8 +193,13 @@ export const generateMerchantSigningKey = async (id: string) => {
 };
 
 /**
- * Deactivates a merchant (admin action). Sets Merchant.active = false only;
- * this does not currently gate login, invoice creation, or any other flow.
+ * Deactivates a merchant (admin moderation action). Sets Merchant.active = false
+ * only; this does not currently gate login, invoice creation, or any other flow.
+ *
+ * Off-chain only. The contract's own set_merchant_status(admin, merchant_id,
+ * status) requires the on-chain admin's signature, which this backend cannot
+ * produce; reconciling the on-chain merchant status is deferred to separate work
+ * and is deliberately not attempted here.
  */
 export const blockMerchant = async (id: string) => {
   const merchant = await prisma.merchant.findUnique({ where: { id } });
@@ -234,4 +247,94 @@ export const updateMyProfile = async (id: string, data: UpdateMerchantInput) => 
   const updated = await prisma.merchant.update({ where: { id }, data: updateData });
 
   return sanitizeMerchant(updated);
+};
+
+// ── Read side (admin dashboard) ───────────────────────────────────────────────
+
+/**
+ * Lists merchants for the admin dashboard. `search` is a case-insensitive
+ * substring match against businessName, email and address; `active`, `verified`
+ * and `category` are exact matches. The literal `id` tiebreaker keeps ordering
+ * stable across pages, matching listSubscriptions and listAuditLogs.
+ */
+export const listAdminMerchants = async (
+  filters: AdminMerchantListFilters,
+  pagination: AdminMerchantListPagination,
+  sortBy: MerchantListSortBy,
+  sortDir: MerchantListSortDir,
+) => {
+  const where: Prisma.MerchantWhereInput = {};
+
+  if (filters.active !== undefined) where.active = filters.active;
+  if (filters.verified !== undefined) where.verified = filters.verified;
+  if (filters.category !== undefined) where.category = filters.category;
+
+  if (filters.search) {
+    where.OR = [
+      { businessName: { contains: filters.search, mode: 'insensitive' } },
+      { email: { contains: filters.search, mode: 'insensitive' } },
+      { address: { contains: filters.search, mode: 'insensitive' } },
+    ];
+  }
+
+  const orderBy: Prisma.MerchantOrderByWithRelationInput[] = [
+    { [sortBy]: sortDir },
+    { id: 'desc' },
+  ];
+
+  const [merchants, total] = await Promise.all([
+    prisma.merchant.findMany({
+      where,
+      take: pagination.limit,
+      skip: pagination.offset,
+      orderBy,
+    }),
+    prisma.merchant.count({ where }),
+  ]);
+
+  return {
+    data: merchants.map(sanitizeMerchant),
+    pagination: {
+      limit: pagination.limit,
+      offset: pagination.offset,
+      total,
+    },
+  };
+};
+
+/**
+ * Full merchant detail for an admin. `sanitizeMerchant` already drops the OTP
+ * columns; nothing else on the row is withheld from an admin.
+ */
+export const getAdminMerchant = async (id: string) => {
+  const merchant = await prisma.merchant.findUnique({ where: { id } });
+
+  if (!merchant) {
+    throw new AppError(404, 'Merchant not found');
+  }
+
+  return sanitizeMerchant(merchant);
+};
+
+/**
+ * Admin-scoped view of a single merchant's invoices. Delegates to the
+ * merchant-facing listInvoices with the same filter and pagination shape, after
+ * confirming the merchant exists so an unknown id is a 404 rather than an empty
+ * page.
+ */
+export const listAdminMerchantInvoices = async (
+  id: string,
+  filters: InvoiceListFilters,
+  pagination: InvoicePagination,
+) => {
+  const merchant = await prisma.merchant.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+
+  if (!merchant) {
+    throw new AppError(404, 'Merchant not found');
+  }
+
+  return listInvoices(id, filters, pagination);
 };
