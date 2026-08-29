@@ -36,6 +36,9 @@ const isNonEmptyString = (value: unknown): value is string =>
  * Parses a query parameter that is meant to be a boolean. Accepts only the
  * strings "true" and "false" (case-insensitive); anything else records an error
  * so a typo does not silently fall through to an unfiltered result.
+ * Parses a boolean query parameter. Query strings never carry a real boolean,
+ * so only the literals "true"/"false" are accepted; anything else is a 400
+ * rather than a silent coercion that would filter on the wrong value.
  */
 const parseBoolean = (
   value: unknown,
@@ -45,6 +48,10 @@ const parseBoolean = (
   const normalized = String(value).trim().toLowerCase();
   if (normalized === 'true') return true;
   if (normalized === 'false') return false;
+  const raw = String(value).toLowerCase();
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+
   errors[field] = `${field} must be either true or false`;
   return undefined;
 };
@@ -53,6 +60,8 @@ const parseBoolean = (
  * Parses admin merchant list query parameters into typed filters, sort and
  * pagination, clamping the page size to [1, MAX_LIMIT] and defaulting to
  * DEFAULT_LIMIT. Mirrors parseAdminSubscriptionListQuery in subscription.validation.ts.
+ * DEFAULT_LIMIT. Mirrors parseAdminSubscriptionListQuery in
+ * subscription.validation.ts.
  */
 export const parseAdminMerchantListQuery = (
   query: Record<string, unknown>,
@@ -119,4 +128,30 @@ export const parseAdminMerchantListQuery = (
   }
 
   return { filters, pagination: { limit, offset }, sortBy, sortDir, errors };
+};
+
+export interface BlockMerchantInput {
+  reason?: string;
+}
+
+/**
+ * Validates the optional `reason` carried on a block request. The reason is
+ * recorded in the audit log's metadata; it is never persisted on Merchant.
+ */
+export const validateBlockMerchant = (
+  body: unknown,
+): { input: BlockMerchantInput; errors: ValidationErrors } => {
+  const errors: ValidationErrors = {};
+  const payload = (body ?? {}) as Record<string, unknown>;
+  const input: BlockMerchantInput = {};
+
+  if (payload.reason !== undefined && payload.reason !== null) {
+    if (typeof payload.reason !== 'string' || payload.reason.trim().length === 0) {
+      errors.reason = 'reason must be a non-empty string';
+    } else {
+      input.reason = payload.reason.trim();
+    }
+  }
+
+  return { input, errors };
 };
