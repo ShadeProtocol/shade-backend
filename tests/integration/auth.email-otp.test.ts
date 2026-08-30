@@ -36,11 +36,19 @@ const registeredMerchant = {
   verified: false,
   emailVerified: false,
   registered: true,
-  emailOtp: null as string | null,
-  emailOtpExpiresAt: null as Date | null,
   createdAt: mockDate,
   updatedAt: mockDate,
 };
+
+const otpRow = (overrides: Record<string, unknown> = {}) => ({
+  id: 'otp-1',
+  merchantId: 'uuid-1',
+  codeHash: 'hash',
+  expiresAt: new Date('2026-06-21T12:05:00.000Z'),
+  usedAt: null as Date | null,
+  createdAt: new Date('2026-06-21T11:55:00.000Z'),
+  ...overrides,
+});
 
 const authenticateAs = (merchant: Record<string, unknown>) => {
   prismaMock.refreshToken.findUnique.mockResolvedValue({
@@ -86,17 +94,13 @@ describe('Email OTP auth routes', () => {
 
     test('returns 200 and marks emailVerified true with correct code', async () => {
       const code = '123456';
-      const emailOtp = await bcrypt.hash(code, 10);
-      const merchantWithOtp = {
-        ...registeredMerchant,
-        emailOtp,
-        emailOtpExpiresAt: new Date('2026-06-21T12:05:00.000Z'),
-      };
+      const codeHash = await bcrypt.hash(code, 10);
 
-      authenticateAs(merchantWithOtp);
-      prismaMock.merchant.findUnique.mockResolvedValue(merchantWithOtp as any);
+      authenticateAs(registeredMerchant);
+      prismaMock.emailOtp.findFirst.mockResolvedValue(otpRow({ codeHash }) as any);
+      prismaMock.emailOtp.update.mockResolvedValue(otpRow({ codeHash, usedAt: mockDate }) as any);
       prismaMock.merchant.update.mockImplementation(async (args: any) => ({
-        ...merchantWithOtp,
+        ...registeredMerchant,
         ...args.data,
       }));
 
@@ -107,13 +111,13 @@ describe('Email OTP auth routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.emailVerified).toBe(true);
+      expect(prismaMock.emailOtp.update).toHaveBeenCalledWith({
+        where: { id: 'otp-1' },
+        data: { usedAt: expect.any(Date) },
+      });
       expect(prismaMock.merchant.update).toHaveBeenCalledWith({
         where: { id: 'uuid-1' },
-        data: {
-          emailVerified: true,
-          emailOtp: null,
-          emailOtpExpiresAt: null,
-        },
+        data: { emailVerified: true },
       });
       expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -127,15 +131,10 @@ describe('Email OTP auth routes', () => {
     });
 
     test('returns 400 for wrong code', async () => {
-      const emailOtp = await bcrypt.hash('123456', 10);
-      const merchantWithOtp = {
-        ...registeredMerchant,
-        emailOtp,
-        emailOtpExpiresAt: new Date('2026-06-21T12:05:00.000Z'),
-      };
+      const codeHash = await bcrypt.hash('123456', 10);
 
-      authenticateAs(merchantWithOtp);
-      prismaMock.merchant.findUnique.mockResolvedValue(merchantWithOtp as any);
+      authenticateAs(registeredMerchant);
+      prismaMock.emailOtp.findFirst.mockResolvedValue(otpRow({ codeHash }) as any);
 
       const response = await request(app)
         .post(VERIFY_EMAIL_URL)
@@ -144,19 +143,17 @@ describe('Email OTP auth routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body).toEqual({ error: 'Invalid verification code' });
+      expect(prismaMock.emailOtp.update).not.toHaveBeenCalled();
     });
 
     test('returns 400 with Code expired for expired code', async () => {
       const code = '123456';
-      const emailOtp = await bcrypt.hash(code, 10);
-      const merchantWithOtp = {
-        ...registeredMerchant,
-        emailOtp,
-        emailOtpExpiresAt: new Date('2026-06-21T11:59:00.000Z'),
-      };
+      const codeHash = await bcrypt.hash(code, 10);
 
-      authenticateAs(merchantWithOtp);
-      prismaMock.merchant.findUnique.mockResolvedValue(merchantWithOtp as any);
+      authenticateAs(registeredMerchant);
+      prismaMock.emailOtp.findFirst.mockResolvedValue(
+        otpRow({ codeHash, expiresAt: new Date('2026-06-21T11:59:00.000Z') }) as any,
+      );
 
       const response = await request(app)
         .post(VERIFY_EMAIL_URL)
@@ -177,15 +174,10 @@ describe('Email OTP auth routes', () => {
     });
 
     test('returns 200 and re-sends OTP when cooldown has elapsed', async () => {
-      const merchantWithOtp = {
-        ...registeredMerchant,
-        emailOtp: 'hashed',
-        emailOtpExpiresAt: new Date('2026-06-21T11:58:00.000Z'),
-      };
-
-      authenticateAs(merchantWithOtp);
-      prismaMock.merchant.findUnique.mockResolvedValue(merchantWithOtp as any);
-      prismaMock.merchant.update.mockResolvedValue(merchantWithOtp as any);
+      authenticateAs(registeredMerchant);
+      prismaMock.merchant.findUnique.mockResolvedValue(registeredMerchant as any);
+      prismaMock.emailOtp.findFirst.mockResolvedValue(null);
+      prismaMock.emailOtp.create.mockResolvedValue(otpRow() as any);
 
       const response = await request(app)
         .post(RESEND_OTP_URL)
@@ -198,11 +190,11 @@ describe('Email OTP auth routes', () => {
         expect.stringMatching(/^\d{6}$/),
         'Ada',
       );
-      expect(prismaMock.merchant.update).toHaveBeenCalledWith({
-        where: { id: 'uuid-1' },
+      expect(prismaMock.emailOtp.create).toHaveBeenCalledWith({
         data: {
-          emailOtp: expect.any(String),
-          emailOtpExpiresAt: expect.any(Date),
+          merchantId: 'uuid-1',
+          codeHash: expect.any(String),
+          expiresAt: expect.any(Date),
         },
       });
       expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
@@ -215,14 +207,11 @@ describe('Email OTP auth routes', () => {
     });
 
     test('returns 429 when resend is requested within one minute', async () => {
-      const merchantWithOtp = {
-        ...registeredMerchant,
-        emailOtp: 'hashed',
-        emailOtpExpiresAt: new Date('2026-06-21T12:09:30.000Z'),
-      };
-
-      authenticateAs(merchantWithOtp);
-      prismaMock.merchant.findUnique.mockResolvedValue(merchantWithOtp as any);
+      authenticateAs(registeredMerchant);
+      prismaMock.merchant.findUnique.mockResolvedValue(registeredMerchant as any);
+      prismaMock.emailOtp.findFirst.mockResolvedValue(
+        otpRow({ createdAt: new Date('2026-06-21T11:59:30.000Z') }) as any,
+      );
 
       const response = await request(app)
         .post(RESEND_OTP_URL)
@@ -231,6 +220,7 @@ describe('Email OTP auth routes', () => {
       expect(response.status).toBe(429);
       expect(response.body).toEqual({ error: 'Please wait before requesting a new code' });
       expect(sendOtpMock).not.toHaveBeenCalled();
+      expect(prismaMock.emailOtp.create).not.toHaveBeenCalled();
     });
   });
 });

@@ -8,11 +8,8 @@ import type {
   MerchantListSortBy,
   MerchantListSortDir,
 } from '../utils/merchant.validation.js';
-import { generateOtp, hashOtp } from './otp.services.js';
-import { sendOtp } from './email.service.js';
+import { issueEmailOtp } from './otp.services.js';
 import { Keypair } from '@stellar/stellar-sdk';
-
-const OTP_EXPIRY_MS = 10 * 60 * 1000;
 
 interface MerchantData {
   merchantId: number;
@@ -105,10 +102,6 @@ export const registerMerchant = async (merchantId: string, data: RegisterMerchan
     throw new AppError(409, 'Email already registered');
   }
 
-  const code = generateOtp();
-  const emailOtp = await hashOtp(code);
-  const emailOtpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
-
   const updatedMerchant = await prisma.merchant.update({
     where: { id: merchantId },
     data: {
@@ -121,13 +114,15 @@ export const registerMerchant = async (merchantId: string, data: RegisterMerchan
       logo: data.logo?.trim() ?? null,
       emailVerified: false,
       registered: true,
-      emailOtp,
-      emailOtpExpiresAt,
     },
   });
 
   try {
-    await sendOtp(normalizedEmail, code, data.firstName.trim());
+    await issueEmailOtp({
+      id: updatedMerchant.id,
+      email: normalizedEmail,
+      firstName: data.firstName.trim(),
+    });
   } catch (err) {
     console.error('Failed to send OTP email after registration', err);
   }
