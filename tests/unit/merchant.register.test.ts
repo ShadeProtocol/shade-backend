@@ -1,19 +1,14 @@
 import { jest } from '@jest/globals';
 import { mockReset } from 'jest-mock-extended';
 
-const sendOtpMock = jest.fn(async () => undefined);
-
-jest.unstable_mockModule('../../src/services/email.service.js', () => ({
-  __esModule: true,
-  sendOtp: sendOtpMock,
-}));
+const issueEmailOtpMock = jest.fn(async () => undefined);
 
 jest.unstable_mockModule('../../src/services/otp.services.js', () => ({
   __esModule: true,
   generateOtp: () => '123456',
   hashOtp: async () => 'hashed-otp',
   verifyOtpHash: async () => true,
-  issueEmailOtp: jest.fn(),
+  issueEmailOtp: issueEmailOtpMock,
   verifyEmailOtp: jest.fn(),
   resendEmailOtp: jest.fn(),
 }));
@@ -37,8 +32,6 @@ const baseMerchant = {
   verified: false,
   emailVerified: false,
   registered: false,
-  emailOtp: null,
-  emailOtpExpiresAt: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -55,10 +48,10 @@ const validPayload = {
 describe('registerMerchant service', () => {
   beforeEach(() => {
     mockReset(prismaMock);
-    sendOtpMock.mockClear();
+    issueEmailOtpMock.mockClear();
   });
 
-  test('completes registration, stores OTP hash and sends email', async () => {
+  test('completes registration and issues an email OTP', async () => {
     prismaMock.merchant.findUnique.mockResolvedValue(baseMerchant as any);
     prismaMock.merchant.findFirst.mockResolvedValue(null);
     prismaMock.merchant.update.mockImplementation(async (args: any) => ({
@@ -70,7 +63,7 @@ describe('registerMerchant service', () => {
 
     expect(prismaMock.merchant.update).toHaveBeenCalledWith({
       where: { id: 'uuid-1' },
-      data: expect.objectContaining({
+      data: {
         firstName: 'Ada',
         lastName: 'Lovelace',
         email: 'ada@example.com',
@@ -80,11 +73,13 @@ describe('registerMerchant service', () => {
         logo: null,
         emailVerified: false,
         registered: true,
-        emailOtp: 'hashed-otp',
-        emailOtpExpiresAt: expect.any(Date),
-      }),
+      },
     });
-    expect(sendOtpMock).toHaveBeenCalledWith('ada@example.com', '123456', 'Ada');
+    expect(issueEmailOtpMock).toHaveBeenCalledWith({
+      id: 'uuid-1',
+      email: 'ada@example.com',
+      firstName: 'Ada',
+    });
     expect(result.emailVerified).toBe(false);
     expect(result.registered).toBe(true);
   });
@@ -95,7 +90,7 @@ describe('registerMerchant service', () => {
     await expect(registerMerchant('missing', validPayload)).rejects.toMatchObject({
       statusCode: 404,
     });
-    expect(sendOtpMock).not.toHaveBeenCalled();
+    expect(issueEmailOtpMock).not.toHaveBeenCalled();
   });
 
   test('throws 409 when profile already set up', async () => {

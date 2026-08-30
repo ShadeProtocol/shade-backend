@@ -34,8 +34,6 @@ const baseMerchant = {
   verified: true,
   emailVerified: true,
   registered: true,
-  emailOtp: null,
-  emailOtpExpiresAt: null,
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
   updatedAt: new Date('2026-01-01T00:00:00.000Z'),
 } as any;

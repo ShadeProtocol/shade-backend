@@ -36,8 +36,6 @@ const merchant = {
   verified: false,
   emailVerified: true,
   registered: true,
-  emailOtp: null,
-  emailOtpExpiresAt: null,
   createdAt: new Date('2026-06-27T12:00:00.000Z'),
   updatedAt: new Date('2026-06-27T12:00:00.000Z'),
 };
@@ -75,7 +73,7 @@ describe('GET /api/v1/admin/merchants', () => {
     expect(response.body.pagination).toEqual({ limit: 20, offset: 0, total: 1 });
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].id).toBe('merchant-1');
-    // sanitizeMerchant keeps the OTP columns out of an admin response too.
+    // sanitizeMerchant is an allow-list, so internal columns never reach an admin response.
     expect(response.body.data[0]).not.toHaveProperty('emailOtp');
     expect(prismaMock.merchant.findMany).toHaveBeenCalledWith({
       where: {},

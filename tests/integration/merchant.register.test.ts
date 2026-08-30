@@ -3,11 +3,11 @@ import { mockReset } from 'jest-mock-extended';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
 
-const sendOtpMock = jest.fn(async () => undefined);
+const issueEmailOtpMock = jest.fn(async () => undefined);
 
 jest.unstable_mockModule('../../src/services/email.service.js', () => ({
   __esModule: true,
-  sendOtp: sendOtpMock,
+  sendOtp: jest.fn(async () => undefined),
   sendInvoiceEmail: jest.fn(async () => undefined),
 }));
 
@@ -16,7 +16,7 @@ jest.unstable_mockModule('../../src/services/otp.services.js', () => ({
   generateOtp: () => '123456',
   hashOtp: async () => 'hashed-otp',
   verifyOtpHash: async () => true,
-  issueEmailOtp: jest.fn(),
+  issueEmailOtp: issueEmailOtpMock,
   verifyEmailOtp: jest.fn(),
   resendEmailOtp: jest.fn(),
 }));
@@ -47,8 +47,6 @@ const baseMerchant = {
   verified: false,
   emailVerified: false,
   registered: false,
-  emailOtp: null,
-  emailOtpExpiresAt: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -71,7 +69,7 @@ const authHeader = `Bearer ${tokenFor(baseMerchant)}`;
 describe('POST /api/v1/merchants/register', () => {
   beforeEach(() => {
     mockReset(prismaMock);
-    sendOtpMock.mockClear();
+    issueEmailOtpMock.mockClear();
   });
 
   test('returns 401 for unauthenticated requests', async () => {
@@ -118,7 +116,11 @@ describe('POST /api/v1/merchants/register', () => {
       emailVerified: false,
       registered: true,
     });
-    expect(sendOtpMock).toHaveBeenCalledWith('ada@example.com', '123456', 'Ada');
+    expect(issueEmailOtpMock).toHaveBeenCalledWith({
+      id: 'uuid-1',
+      email: 'ada@example.com',
+      firstName: 'Ada',
+    });
     expect(prismaMock.adminLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         action: 'merchant.profile_registered',

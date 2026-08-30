@@ -80,8 +80,6 @@ model Merchant {
   verified      Boolean   @default(false)
   emailVerified     Boolean   @default(false)
   registered        Boolean   @default(false)
-  emailOtp          String?
-  emailOtpExpiresAt DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -92,6 +90,23 @@ model Merchant {
   analytics          MerchantAnalytics[]
   subscriptionPlans  SubscriptionPlan[]
   transactions       Transaction[]
+  emailOtps          EmailOtp[]
+}
+
+// One row per generated email verification code, shaped like AuthNonce: the code
+// is stored only as a bcrypt hash, and a row is spent by stamping usedAt rather
+// than being overwritten. Keeping history (instead of a single mutable field on
+// Merchant) is what lets resendEmailOtp rate-limit by querying for a recent row.
+model EmailOtp {
+  id         String    @id @default(uuid())
+  merchantId String
+  merchant   Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  codeHash   String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([merchantId, createdAt])
 }
 
 model AuthNonce {
